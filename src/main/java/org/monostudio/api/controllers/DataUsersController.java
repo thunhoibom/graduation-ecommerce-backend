@@ -1,0 +1,98 @@
+package org.monostudio.api.controllers;
+
+import com.querydsl.core.types.OrderSpecifier;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import org.monostudio.api.DataCrudGenericController;
+import org.monostudio.api.models.DataPagePojo;
+import org.monostudio.api.models.UserPojo;
+import org.monostudio.api.services.PaginationService;
+import org.monostudio.common.exceptions.BadInputException;
+import org.monostudio.jpa.entities.User;
+import org.monostudio.jpa.services.SortSpecParserService;
+import org.monostudio.jpa.services.crud.UsersCrudService;
+import org.monostudio.jpa.services.predicates.UsersPredicateService;
+import org.monostudio.jpa.sortspecs.UsersSortSpec;
+
+import jakarta.persistence.EntityExistsException;
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.validation.Valid;
+import java.security.Principal;
+import java.util.Map;
+
+import static org.springframework.http.HttpStatus.CREATED;
+import static org.springframework.http.HttpStatus.NO_CONTENT;
+
+@RestController
+@RequestMapping("/data/users")
+@Tag(name = "Users management")
+@PreAuthorize("isAuthenticated()")
+public class DataUsersController
+    extends DataCrudGenericController<UserPojo, User> {
+
+    @Autowired
+    public DataUsersController(
+        PaginationService paginationService,
+        SortSpecParserService sortService,
+        UsersCrudService crudService,
+        UsersPredicateService predicateService
+    ) {
+        super(paginationService, sortService, crudService, predicateService);
+    }
+
+    @Override
+    @GetMapping
+    @Operation(summary = "List users.")
+    @PreAuthorize("hasAuthority('users:read')")
+    public DataPagePojo<UserPojo> readMany(@RequestParam Map<String, String> allRequestParams) {
+        return super.readMany(allRequestParams);
+    }
+
+    @Override
+    @PostMapping
+    @Operation(summary = "Register new users.")
+    @ResponseStatus(CREATED)
+    @PreAuthorize("hasAuthority('users:create')")
+    public void create(@Valid @RequestBody UserPojo input)
+        throws BadInputException, EntityExistsException {
+        crudService.create(input);
+    }
+
+    @Override
+    @PutMapping
+    @Operation(summary = "Replace users data.")
+    @ResponseStatus(NO_CONTENT)
+    @PreAuthorize("hasAuthority('users:update')")
+    public void update(@Valid @RequestBody UserPojo input, @RequestParam Map<String, String> requestParams)
+        throws BadInputException, EntityNotFoundException {
+        super.update(input, requestParams);
+    }
+
+    @DeleteMapping
+    @Operation(summary = "Remove users.")
+    @ResponseStatus(NO_CONTENT)
+    @PreAuthorize("hasAuthority('users:delete')")
+    public void delete(Principal principal, @RequestParam Map<String, String> requestParams)
+        throws EntityNotFoundException, BadInputException {
+        if (requestParams.containsKey("name") && requestParams.get("name").equals(principal.getName())) {
+            throw new BadInputException("A user should not be able to delete their own account");
+        }
+        super.delete(requestParams);
+    }
+
+    @Override
+    protected Map<String, OrderSpecifier<?>> getOrderSpecMap() {
+        return UsersSortSpec.ORDER_SPEC_MAP;
+    }
+}

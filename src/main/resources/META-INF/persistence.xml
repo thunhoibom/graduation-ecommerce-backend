@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<persistence version="2.1" xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence http://xmlns.jcp.org/xml/ns/persistence/persistence_2_1.xsd">
+  <persistence-unit name="cl.blm.newmarketing.store.persistence-unit" transaction-type="RESOURCE_LOCAL">
+    <class>org.monostudio.jpa.entities.Permission</class>
+    <class>org.monostudio.jpa.entities.Customer</class>
+    <class>org.monostudio.jpa.entities.Order</class>
+    <class>org.monostudio.jpa.entities.Param</class>
+    <class>org.monostudio.jpa.entities.Salesperson</class>
+    <class>org.monostudio.jpa.entities.ProductFamily</class>
+    <class>org.monostudio.jpa.entities.UserRole</class>
+    <class>org.monostudio.jpa.entities.Image</class>
+    <class>org.monostudio.jpa.entities.OrderStatus</class>
+    <class>org.monostudio.jpa.entities.ProductImage</class>
+    <class>org.monostudio.jpa.entities.OrderDetail</class>
+    <class>org.monostudio.jpa.entities.Product</class>
+    <class>org.monostudio.jpa.entities.Person</class>
+    <class>org.monostudio.jpa.entities.User</class>
+    <class>org.monostudio.jpa.entities.ProductCategory</class>
+    <class>org.monostudio.jpa.entities.BillingType</class>
+    <exclude-unlisted-classes>false</exclude-unlisted-classes>
+  </persistence-unit>
+</persistence>
