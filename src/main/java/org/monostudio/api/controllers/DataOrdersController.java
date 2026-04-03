@@ -5,7 +5,6 @@ import com.querydsl.core.types.Predicate;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,8 +27,6 @@ import org.monostudio.jpa.services.SortSpecParserService;
 import org.monostudio.jpa.services.crud.OrdersCrudService;
 import org.monostudio.jpa.services.predicates.OrdersPredicateService;
 import org.monostudio.jpa.sortspecs.OrdersSortSpec;
-import org.monostudio.mailing.MailingService;
-import org.monostudio.mailing.MailingServiceException;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
@@ -48,8 +45,6 @@ import static org.springframework.http.HttpStatus.NO_CONTENT;
 public class DataOrdersController
     extends DataCrudGenericController<OrderPojo, Order> {
     private final OrdersProcessService processService;
-    @Nullable
-    private final MailingService mailingService;
 
     @Autowired
     public DataOrdersController(
@@ -57,12 +52,10 @@ public class DataOrdersController
         SortSpecParserService sortService,
         OrdersCrudService crudService,
         OrdersPredicateService predicateService,
-        OrdersProcessService processService,
-        @Autowired(required = false) MailingService mailingService
+        OrdersProcessService processService
     ) {
         super(paginationService, sortService, crudService, predicateService);
         this.processService = processService;
-        this.mailingService = mailingService;
     }
 
     @Override
@@ -136,34 +129,24 @@ public class DataOrdersController
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('orders:update')")
     public void confirmSell(@RequestBody OrderPojo sell)
-        throws BadInputException, MailingServiceException {
-        OrderPojo updatedSell = processService.markAsConfirmed(sell);
-        if (this.mailingService!=null) {
-            mailingService.notifyOrderStatusToClient(updatedSell);
-            mailingService.notifyOrderStatusToOwners(updatedSell);
-        }
+        throws BadInputException, EntityNotFoundException {
+        processService.markAsConfirmed(sell);
     }
 
     @PostMapping("/rejection")
     @Operation(summary = "Reject a pending order.")
     @PreAuthorize("hasAuthority('orders:update')")
     public void rejectSell(@RequestBody OrderPojo sell)
-        throws BadInputException, MailingServiceException {
-        OrderPojo updatedSell = processService.markAsRejected(sell);
-        if (this.mailingService!=null) {
-            mailingService.notifyOrderStatusToClient(updatedSell);
-        }
+        throws BadInputException, EntityNotFoundException {
+        processService.markAsRejected(sell);
     }
 
     @PostMapping("/completion")
     @Operation(summary = "Mark an order as completed.")
     @PreAuthorize("hasAuthority('orders:update')")
     public void completeSell(@RequestBody OrderPojo sell)
-        throws BadInputException, MailingServiceException {
-        OrderPojo updatedSell = processService.markAsCompleted(sell);
-        if (this.mailingService!=null) {
-            mailingService.notifyOrderStatusToClient(updatedSell);
-        }
+        throws BadInputException, EntityNotFoundException {
+        processService.markAsCompleted(sell);
     }
 
     @Override

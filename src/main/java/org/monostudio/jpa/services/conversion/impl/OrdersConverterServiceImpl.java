@@ -109,6 +109,9 @@ public class OrdersConverterServiceImpl
             .totalItems(source.getTotalItems())
             .transportValue(source.getTransportValue())
             .token(source.getTransactionToken())
+            .discountCode(source.getDiscountCode())
+            .discountValue(source.getDiscountValue())
+            .cartSessionToken(source.getCartSessionToken())
             .build();
 
         PersonPojo customer = customersConverterService.convertToPojo(source.getCustomer());
@@ -149,6 +152,13 @@ public class OrdersConverterServiceImpl
         }
         orderStatusesRepository.findByName(ORDER_STATUS_PENDING)
             .ifPresent(target::setStatus);
+        if (model.getDiscountCode()!=null) {
+            target.setDiscountCode(model.getDiscountCode());
+            target.setDiscountValue(model.getDiscountValue());
+        }
+        if (model.getCartSessionToken()!=null) {
+            target.setCartSessionToken(model.getCartSessionToken());
+        }
         this.convertPaymentTypeInformationForEntity(model, target);
         this.convertCustomerInformationForEntity(model, target);
         this.convertBillingInformationForEntity(model, target);
@@ -167,6 +177,7 @@ public class OrdersConverterServiceImpl
             .units(source.getUnits())
             .product(product)
             .description(source.getDescription())
+            .variantId(source.getProductVariant() != null ? source.getProductVariant().getId() : null)
             .build();
     }
 
@@ -332,13 +343,14 @@ public class OrdersConverterServiceImpl
             int unitValue = sd.getUnitValue();
             double unitTaxValue = unitValue * TAX_PERCENT;
             double unitNetValue = unitValue - unitTaxValue;
-            taxesValue += (unitTaxValue * sd.getUnits());
-            netValue += (unitNetValue * sd.getUnits());
+            taxesValue += (int) (unitTaxValue * sd.getUnits());
+            netValue += (int) (unitNetValue * sd.getUnits());
             totalUnits += sd.getUnits();
         }
         entity.setTaxesValue(taxesValue);
         entity.setNetValue(netValue);
-        entity.setTotalValue(taxesValue + netValue);
+        int discountValue = entity.getDiscountValue();
+        entity.setTotalValue(Math.max(0, taxesValue + netValue + entity.getTransportValue() - discountValue));
         entity.setTotalItems(totalUnits);
     }
 

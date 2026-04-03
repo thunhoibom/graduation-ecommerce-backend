@@ -61,6 +61,11 @@ public class Order
     private int taxesValue;
     @Column(name = "order_total_value", nullable = false)
     private int totalValue;
+    @Column(name = "order_discount_code")
+    private String discountCode;
+    @Column(name = "order_discount_value", nullable = false)
+    @Builder.Default
+    private int discountValue = 0;
     @Size(min = 64, max = 64)
     @Column(name = "order_transaction_token")
     private String transactionToken;
@@ -96,6 +101,14 @@ public class Order
     private Collection<OrderDetail> details;
 
     /**
+     * The cart session token used for this order.
+     * Stored so that stock reservations can be confirmed after payment success.
+     * Null for orders placed via the legacy checkout path (no CartSession).
+     */
+    @Column(name = "order_cart_session_token")
+    private String cartSessionToken;
+
+    /**
      * Please note that this copy-constructor only preserves the following relationships.
      * <ul>
      *   <li>OrderStatus</li>
@@ -113,6 +126,8 @@ public class Order
         this.transportValue = source.transportValue;
         this.taxesValue = source.taxesValue;
         this.totalValue = source.totalValue;
+        this.discountCode = source.discountCode;
+        this.discountValue = source.discountValue;
         this.transactionToken = source.transactionToken;
         this.paymentType = source.paymentType;
         this.status = source.status;
@@ -124,5 +139,6 @@ public class Order
         this.shippingMethod = null;
         this.shippingAddress = null;
         this.salesperson = null;
+        this.cartSessionToken = source.cartSessionToken;
     }
 }

@@ -6,7 +6,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.lang.Nullable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,8 +22,6 @@ import org.monostudio.api.services.CheckoutService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.services.crud.OrdersCrudService;
 import org.monostudio.jpa.services.predicates.OrdersPredicateService;
-import org.monostudio.mailing.MailingService;
-import org.monostudio.mailing.MailingServiceException;
 import org.monostudio.payment.PaymentServiceException;
 
 import jakarta.persistence.EntityExistsException;
@@ -47,20 +44,16 @@ public class PublicCheckoutController {
     private final CheckoutService service;
     private final OrdersCrudService ordersCrudService;
     private final OrdersPredicateService ordersPredicateService;
-    @Nullable
-    private final MailingService mailingService;
 
     @Autowired
     public PublicCheckoutController(
         CheckoutService service,
         OrdersCrudService ordersCrudService,
-        OrdersPredicateService ordersPredicateService,
-        @Autowired(required = false) MailingService mailingService
+        OrdersPredicateService ordersPredicateService
     ) {
         this.service = service;
         this.ordersCrudService = ordersCrudService;
         this.ordersPredicateService = ordersPredicateService;
-        this.mailingService = mailingService;
     }
 
     /**
@@ -93,15 +86,12 @@ public class PublicCheckoutController {
     @GetMapping("/validate")
     @Operation(summary = "Request that an order status be updated after having begun checkout")
     public ResponseEntity<Void> validateSuccesfulTransaction(@RequestParam Map<String, String> transactionData)
-        throws BadInputException, EntityNotFoundException, PaymentServiceException, MailingServiceException {
+        throws BadInputException, EntityNotFoundException, PaymentServiceException {
         if (!transactionData.containsKey(WEBPAY_SUCCESS_TOKEN_HEADER_NAME)) { // success
             throw new BadInputException("No transaction token was provided");
         }
         String token = transactionData.get(WEBPAY_SUCCESS_TOKEN_HEADER_NAME);
-        OrderPojo orderPojo = service.confirmTransaction(token, false);
-        if (this.mailingService!=null) {
-            mailingService.notifyOrderStatusToClient(orderPojo);
-        }
+        service.confirmTransaction(token, false);
         URI transactionUri = service.generateResultPageUrl(token);
         return ResponseEntity
             .status(SEE_OTHER)

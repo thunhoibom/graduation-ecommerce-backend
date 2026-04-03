@@ -26,10 +26,10 @@ public class StockReservationScheduler {
     }
 
     /**
-     * Runs every 5 minutes (cron: "0 */5 * * * *").
      * Releases all reservations whose expiresAt timestamp is in the past.
+     * Runs every 5 minutes.
      */
-    @Scheduled(cron = "0 */5 * * * *")
+    @Scheduled(fixedRateString = "300000")
     public void expireStaleReservations() {
         logger.debug("Running stale reservation expiry job...");
         int released = stockReservationService.expireStaleReservations();

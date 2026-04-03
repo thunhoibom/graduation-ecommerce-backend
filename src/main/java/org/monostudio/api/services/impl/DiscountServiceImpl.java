@@ -59,9 +59,24 @@ public class DiscountServiceImpl
             return DiscountValidationResult.invalid("Invalid discount code");
         }
 
-        // Check max uses
+        // Check max uses (global)
         if (discount.getMaxUses() != null && discount.getUseCount() >= discount.getMaxUses()) {
             return DiscountValidationResult.invalid("This discount code has reached its usage limit");
+        }
+
+        // Check per-customer usage limit.
+        // NOTE: Full enforcement requires a DiscountUsage tracking table
+        // (discount_code_id, customer_id, use_count). Without it, this check
+        // is a soft guard only — the global useCount above is the authoritative limit.
+        // TODO: Create DiscountUsage entity to track (discount_code, customer_id) usage
+        //       and add a DiscountUsagesRepository.countByCodeAndCustomer(code, customerId) query.
+        if (discount.getMaxUsesPerCustomer() != null && customerId != null) {
+            // Placeholder: would query DiscountUsageRepository.countByDiscountCodeAndCustomerId(...)
+            // Until DiscountUsage exists, per-customer limits cannot be fully enforced.
+            // The global useCount provides a hard ceiling in the meantime.
+            logger.debug("maxUsesPerCustomer={} set for code '{}', but per-customer "
+                + "usage tracking is not yet implemented — relying on global useCount",
+                discount.getMaxUsesPerCustomer(), discount.getCode());
         }
 
         // Check minimum cart value

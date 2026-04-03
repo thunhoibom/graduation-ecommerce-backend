@@ -24,6 +24,7 @@ public class OrderPojo {
     private Long buyOrder;
     @JsonIgnore
     private String token;
+    private String cartSessionToken;
     private Instant date;
     @Valid
     @NotEmpty
@@ -34,6 +35,8 @@ public class OrderPojo {
     private int transportValue;
     private int totalValue;
     private int totalItems;
+    private String discountCode;
+    private int discountValue;
     private String status;
     private String billingType;
     @NotBlank

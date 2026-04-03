@@ -172,13 +172,11 @@ public class CheckoutServiceImpl
         discountService.redeemDiscount(request.getDiscountCode(), subtotal, customerId);
 
         // ── 7. Build OrderPojo ───────────────────────────────────────────────────
-        int totalValue = subtotal + shippingFee - discountAmount;
-
         OrderPojo orderPojo = OrderPojo.builder()
+            .transportValue(shippingFee)
             .netValue(netValue)
             .taxValue(taxesValue)
-            .transportValue(shippingFee)
-            .totalValue(Math.max(0, totalValue))
+            .totalValue(Math.max(0, subtotal + shippingFee - discountAmount))
             .totalItems(totalItems)
             .paymentType(request.getPaymentType())
             .billingType(request.getBillingType())
@@ -188,6 +186,9 @@ public class CheckoutServiceImpl
             .billingAddress(request.getBillingAddress())
             .shipper(shippingMethod.getName())
             .details(orderDetails)
+            .discountCode(discountResult.isValid() ? request.getDiscountCode() : null)
+            .discountValue(discountAmount)
+            .cartSessionToken(request.getSessionToken())
             .build();
 
         // ── 8. Create order ─────────────────────────────────────────────────────
@@ -201,7 +202,7 @@ public class CheckoutServiceImpl
         ordersProcessService.markAsStarted(createdOrder);
 
         logger.info("Checkout started: orderId={}, token={}, total={}, shipping={}, discount={}",
-            createdOrder.getBuyOrder(), paymentDetails.getToken(), totalValue, shippingFee, discountAmount);
+            createdOrder.getBuyOrder(), paymentDetails.getToken(), createdOrder.getTotalValue(), shippingFee, discountAmount);
 
         return paymentDetails;
     }

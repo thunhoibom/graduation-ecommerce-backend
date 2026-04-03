@@ -1,11 +1,16 @@
 package org.monostudio.api.services.impl;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.ProductPojo;
 import org.monostudio.api.models.OrderDetailPojo;
 import org.monostudio.api.models.OrderPojo;
+import org.monostudio.mailing.MailingService;
+import org.monostudio.mailing.MailingServiceException;
+import org.monostudio.api.services.DiscountService;
 import org.monostudio.api.services.OrdersProcessService;
+import org.monostudio.api.services.StockReservationService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.entities.OrderDetail;
@@ -16,6 +21,8 @@ import org.monostudio.jpa.repositories.OrderStatusesRepository;
 import org.monostudio.jpa.services.conversion.ProductsConverterService;
 import org.monostudio.jpa.services.conversion.OrdersConverterService;
 import org.monostudio.jpa.services.crud.OrdersCrudService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.util.ArrayList;
@@ -38,12 +45,16 @@ public class OrdersProcessServiceImpl
     private static final String THE_TRANSACTION_IS_NOT_IN_A_VALID_STATE_FOR_THIS_OPERATION = "The transaction is not in a valid state for this api";
     private static final String NO_STATUS_MATCHES_THE = "No status matches the";
     private static final String NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT = "name - Is the database empty or corrupt?";
+    private final Logger logger = LoggerFactory.getLogger(OrdersProcessServiceImpl.class);
     private final OrdersCrudService crudService;
     private final OrdersRepository ordersRepository;
     private final OrderDetailsRepository orderDetailsRepository;
     private final OrderStatusesRepository orderStatusesRepository;
     private final OrdersConverterService converterService;
     private final ProductsConverterService productConverterService;
+    private final MailingService mailingService;
+    private final StockReservationService stockReservationService;
+    private final DiscountService discountService;
 
     public OrdersProcessServiceImpl(
         OrdersCrudService crudService,
@@ -51,7 +62,10 @@ public class OrdersProcessServiceImpl
         OrderDetailsRepository orderDetailsRepository,
         OrderStatusesRepository orderStatusesRepository,
         OrdersConverterService converterService,
-        ProductsConverterService productConverterService
+        ProductsConverterService productConverterService,
+        @Autowired(required = false) MailingService mailingService,
+        StockReservationService stockReservationService,
+        DiscountService discountService
     ) {
         this.crudService = crudService;
         this.ordersRepository = ordersRepository;
@@ -59,6 +73,31 @@ public class OrdersProcessServiceImpl
         this.orderStatusesRepository = orderStatusesRepository;
         this.converterService = converterService;
         this.productConverterService = productConverterService;
+        this.mailingService = mailingService;
+        this.stockReservationService = stockReservationService;
+        this.discountService = discountService;
+    }
+
+    private void sendClientEmail(OrderPojo order) {
+        if (mailingService != null) {
+            try {
+                mailingService.notifyOrderStatusToClient(order);
+            } catch (MailingServiceException e) {
+                logger.warn("Failed to send order status email to client for order {}: {}",
+                    order.getBuyOrder(), e.getMessage());
+            }
+        }
+    }
+
+    private void sendOwnerEmail(OrderPojo order) {
+        if (mailingService != null) {
+            try {
+                mailingService.notifyOrderStatusToOwners(order);
+            } catch (MailingServiceException e) {
+                logger.warn("Failed to send order status email to owners for order {}: {}",
+                    order.getBuyOrder(), e.getMessage());
+            }
+        }
     }
 
     // TODO figure out how to shorten below methods
@@ -80,6 +119,7 @@ public class OrdersProcessServiceImpl
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
         target.setStatus(ORDER_STATUS_PAYMENT_STARTED);
+        sendClientEmail(target);
         return target;
     }
 
@@ -99,6 +139,13 @@ public class OrdersProcessServiceImpl
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
         target.setStatus(ORDER_STATUS_PAYMENT_CANCELLED);
+
+        // Release stock reservations since payment was cancelled
+        if (existingOrder.getCartSessionToken() != null) {
+            stockReservationService.release(existingOrder.getCartSessionToken());
+        }
+
+        sendClientEmail(target);
         return target;
     }
 
@@ -118,6 +165,13 @@ public class OrdersProcessServiceImpl
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
         target.setStatus(ORDER_STATUS_PAYMENT_FAILED);
+
+        // Release stock reservations since payment failed
+        if (existingOrder.getCartSessionToken() != null) {
+            stockReservationService.release(existingOrder.getCartSessionToken());
+        }
+
+        sendClientEmail(target);
         return target;
     }
 
@@ -140,15 +194,49 @@ public class OrdersProcessServiceImpl
         List<OrderDetailPojo> pojoDetails = new ArrayList<>();
         for (OrderDetail detail : orderDetailsRepository.findBySellId(existingOrder.getId())) {
             ProductPojo productPojo = productConverterService.convertToPojo(detail.getProduct());
+            String variantSku = detail.getProductVariant() != null
+                ? detail.getProductVariant().getSku() : null;
             OrderDetailPojo orderDetailPojo = OrderDetailPojo.builder()
                 .units(detail.getUnits())
                 .unitValue(detail.getUnitValue())
                 .product(productPojo)
+                .variantId(detail.getProductVariant() != null ? detail.getProductVariant().getId() : null)
                 .build();
             pojoDetails.add(orderDetailPojo);
         }
         target.setStatus(ORDER_STATUS_PAID_UNCONFIRMED);
         target.setDetails(pojoDetails);
+
+        // Confirm stock reservations per-variant (not the whole session)
+        // This prevents double-deduction if the same cart is checked out twice
+        if (existingOrder.getCartSessionToken() != null) {
+            for (OrderDetail detail : orderDetailsRepository.findBySellId(existingOrder.getId())) {
+                if (detail.getProductVariant() != null) {
+                    stockReservationService.confirmItem(
+                        existingOrder.getCartSessionToken(),
+                        detail.getProductVariant().getSku()
+                    );
+                }
+            }
+        }
+
+        // Redeem discount only after payment is confirmed — not when checkout starts.
+        // This prevents "burning" a discount code when the customer abandons or fails payment.
+        if (existingOrder.getDiscountCode() != null && !existingOrder.getDiscountCode().isBlank()) {
+            int subtotal = existingOrder.getNetValue() + existingOrder.getTaxesValue();
+            Long customerId = (existingOrder.getCustomer() != null) ? existingOrder.getCustomer().getId() : null;
+            try {
+                discountService.redeemDiscount(existingOrder.getDiscountCode(), subtotal, customerId);
+            } catch (BadInputException e) {
+                // Payment already succeeded — log but do not roll back the order.
+                // Admin can manually adjust the discount usage count if needed.
+                logger.warn("Failed to redeem discount code '{}' for order {}: {}",
+                    existingOrder.getDiscountCode(), existingOrder.getId(), e.getMessage());
+            }
+        }
+
+        sendClientEmail(target);
+        sendOwnerEmail(target);
 
         return target;
     }
@@ -183,6 +271,7 @@ public class OrdersProcessServiceImpl
         target.setDetails(pojoDetails);
         target.setStatus(ORDER_STATUS_PAID_CONFIRMED);
 
+        sendClientEmail(target);
 
         return target;
     }
@@ -217,6 +306,9 @@ public class OrdersProcessServiceImpl
         target.setDetails(pojoDetails);
         target.setStatus(ORDER_STATUS_REJECTED);
 
+        sendClientEmail(target);
+        sendOwnerEmail(target);
+
         return target;
     }
 
@@ -249,6 +341,8 @@ public class OrdersProcessServiceImpl
         }
         target.setDetails(pojoDetails);
         target.setStatus(ORDER_STATUS_COMPLETED);
+
+        sendClientEmail(target);
 
         return target;
     }
