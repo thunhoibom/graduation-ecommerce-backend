@@ -25,4 +25,8 @@ public class MailingProperties {
     private String ownerOrderConfirmationSubject;
     private String ownerOrderRejectionSubject;
     private String ownerOrderCompletionSubject;
+    private String customerReturnRequestCreatedSubject;
+    private String customerReturnRequestApprovedSubject;
+    private String customerReturnRequestRejectedSubject;
+    private String customerReturnRequestRefundCompletedSubject;
 }

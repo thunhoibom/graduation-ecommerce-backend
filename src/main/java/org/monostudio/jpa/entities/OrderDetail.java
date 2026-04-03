@@ -56,6 +56,15 @@ public class OrderDetail
     private Order order;
 
     /**
+     * Optional reference to the specific product variant ordered.
+     * If null, the order was placed against the base product only (legacy orders).
+     */
+    @JoinColumn(name = "product_variant_id",
+        foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
+    @ManyToOne(fetch = FetchType.LAZY)
+    private ProductVariant productVariant;
+
+    /**
      * Please note: this copy-constructor does not include a OrderDetail's relationships
      *
      * @param source The original OrderDetail
@@ -67,5 +76,6 @@ public class OrderDetail
         this.description = source.description;
         this.product = null;
         this.order = null;
+        this.productVariant = null;
     }
 }

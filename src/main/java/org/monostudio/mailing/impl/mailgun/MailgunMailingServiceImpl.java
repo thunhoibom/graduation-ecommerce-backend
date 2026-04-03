@@ -23,6 +23,11 @@ import org.monostudio.api.models.ReceiptDetailPojo;
 import org.monostudio.api.models.ReceiptPojo;
 import org.monostudio.api.models.OrderDetailPojo;
 import org.monostudio.api.models.OrderPojo;
+import org.monostudio.api.models.ReturnRequestPojo;
+import org.monostudio.jpa.entities.Order;
+import org.monostudio.jpa.entities.ReturnRequest;
+import org.monostudio.jpa.repositories.OrdersRepository;
+import org.monostudio.jpa.services.conversion.CustomersConverterService;
 import org.monostudio.mailing.MailingProperties;
 import org.monostudio.mailing.MailingService;
 import org.monostudio.mailing.MailingServiceException;
@@ -32,6 +37,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TimeZone;
 
 import static org.monostudio.config.Constants.ORDER_STATUS_COMPLETED;
@@ -51,11 +57,17 @@ public class MailgunMailingServiceImpl
     public static final String MAILGUN_HOST = "https://api.mailgun.net/v3/";
     private static final String CUSTOMER_MAPS_KEY_PREFIX = "customer:";
     private static final String OWNERS_MAPS_KEY_PREFIX = "owners:";
+    private static final String RETURN_REQUEST_PREFIX = "returnRequest:";
+
     private final Logger logger = LoggerFactory.getLogger(MailgunMailingServiceImpl.class);
     private final MailingProperties internalMailingIntegrationProperties;
     private final MailgunMailingProperties mailgunProperties;
+    private final OrdersRepository ordersRepository;
+    private final CustomersConverterService customersConverterService;
     private final Map<String, String> orderStatus2MailgunTemplatesMap;
     private final Map<String, String> orderStatus2MailSubjectMap;
+    private final Map<String, String> returnRequestTemplatesMap;
+    private final Map<String, String> returnRequestSubjectsMap;
     private final ConversionService conversionService;
     private final ObjectMapper mailObjectMapper;
     private final HttpRequestWithBody baseRequestWithBody;
@@ -64,13 +76,19 @@ public class MailgunMailingServiceImpl
     public MailgunMailingServiceImpl(
         MailingProperties mailingIntegrationProperties,
         MailgunMailingProperties mailgunProperties,
+        OrdersRepository ordersRepository,
+        CustomersConverterService customersConverterService,
         ConversionService conversionService
     ) {
         this.internalMailingIntegrationProperties = mailingIntegrationProperties;
         this.mailgunProperties = mailgunProperties;
+        this.ordersRepository = ordersRepository;
+        this.customersConverterService = customersConverterService;
         this.conversionService = conversionService;
         this.orderStatus2MailgunTemplatesMap = this.makeTemplatesMap();
         this.orderStatus2MailSubjectMap = this.makeSubjectsMap();
+        this.returnRequestTemplatesMap = this.makeReturnRequestTemplatesMap();
+        this.returnRequestSubjectsMap = this.makeReturnRequestSubjectsMap();
         this.mailObjectMapper = this.mailObjectMapper();
         this.baseRequestWithBody = this.prepareBaseApiRequest();
     }
@@ -134,13 +152,96 @@ public class MailgunMailingServiceImpl
         }
     }
 
+    @Override
+    public void notifyLowStockAlert(String productName, int currentStock)
+        throws MailingServiceException {
+        String subject = "[Mono Studio] Low Stock Alert: " + productName;
+        HttpResponse<JsonNode> response = this.preparePOST(
+                internalMailingIntegrationProperties.getOwnerEmail(),
+                subject,
+                null,
+                "{\"product\":\"" + productName + "\",\"stock\":" + currentStock + "}")
+            .asJson();
+        logger.info("Low stock alert sent for {}: response={}", productName, response.getStatus());
+    }
+
+    @Override
+    public void notifyReturnRequestStatusToClient(ReturnRequestPojo request)
+        throws MailingServiceException {
+        String mapsKey = RETURN_REQUEST_PREFIX + request.getStatus();
+        if (!returnRequestSubjectsMap.containsKey(mapsKey)) {
+            logger.info("No email template configured for return request status: {}", request.getStatus());
+            return;
+        }
+
+        Optional<Order> orderOpt = ordersRepository.findById(
+            request.getOrderId() != null ? request.getOrderId() : -1L);
+
+        if (orderOpt.isEmpty()) {
+            logger.warn("Cannot send return request email: order {} not found", request.getOrderId());
+            return;
+        }
+
+        Order order = orderOpt.get();
+        PersonPojo customer = customersConverterService.convertToPojo(order.getCustomer());
+        String customerName = customer.getFirstName() + " " + customer.getLastName();
+        String recipient = customerName + " <" + customer.getEmail() + ">";
+
+        String messageSubject = returnRequestSubjectsMap.get(mapsKey);
+        String fullSubject = messageSubject + " [#" + request.getId() + "]";
+        String mailgunTemplateName = returnRequestTemplatesMap.get(mapsKey);
+        String variables = this.makeReturnRequestMailgunVariables(request);
+
+        HttpResponse<JsonNode> response = this.preparePOST(
+                recipient,
+                fullSubject,
+                mailgunTemplateName,
+                variables)
+            .asJson();
+
+        try {
+            if (((String) response.getBody().getObject().get("id")).isBlank()) {
+                logger.warn("Mailgun returned: {}", response.getBody());
+                throw new MailingServiceException("Return request email status unknown, Mailgun did not return an ID");
+            }
+        } catch (JSONException ex) {
+            throw new MailingServiceException("Return request email failed", ex);
+        }
+    }
+
+    @Override
+    public void notifyReturnRequestToOwners(ReturnRequestPojo request)
+        throws MailingServiceException {
+        String subject = "[Mono Studio] New Return Request #" + request.getId();
+        String variables = this.makeReturnRequestMailgunVariables(request);
+        HttpResponse<JsonNode> response = this.preparePOST(
+                internalMailingIntegrationProperties.getOwnerEmail(),
+                subject,
+                null,
+                variables)
+            .asJson();
+        logger.info("Return request notification sent: response={}", response.getStatus());
+    }
+
+    private String makeReturnRequestMailgunVariables(ReturnRequestPojo request) {
+        try {
+            String requestJson = mailObjectMapper.writeValueAsString(request);
+            return "{\"returnRequest\": " + requestJson + "}";
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not stringify return request object", e);
+        }
+    }
+
     private MultipartBody preparePOST(String to, String subject, String templateName, String templateVariables) {
-        return baseRequestWithBody
+        HttpRequestWithBody req = baseRequestWithBody
             .field("from", internalMailingIntegrationProperties.getSenderEmail())
             .field("to", to)
             .field("subject", subject)
-            .field("template", templateName)
             .field("h:X-Mailgun-Variables", templateVariables);
+        if (templateName != null) {
+            req.field("template", templateName);
+        }
+        return req;
     }
 
     private Map<String, String> makeTemplatesMap() {
@@ -164,6 +265,32 @@ public class MailgunMailingServiceImpl
             OWNERS_MAPS_KEY_PREFIX + ORDER_STATUS_PAID_CONFIRMED, internalMailingIntegrationProperties.getOwnerOrderConfirmationSubject(),
             OWNERS_MAPS_KEY_PREFIX + ORDER_STATUS_REJECTED, internalMailingIntegrationProperties.getOwnerOrderRejectionSubject(),
             OWNERS_MAPS_KEY_PREFIX + ORDER_STATUS_COMPLETED, internalMailingIntegrationProperties.getOwnerOrderCompletionSubject()
+        );
+    }
+
+    private Map<String, String> makeReturnRequestTemplatesMap() {
+        return Map.of(
+            RETURN_REQUEST_PREFIX + ReturnRequest.ReturnRequestStatus.PENDING.name(),
+                mailgunProperties.getCustomerReturnRequestCreatedTemplate(),
+            RETURN_REQUEST_PREFIX + ReturnRequest.ReturnRequestStatus.APPROVED.name(),
+                mailgunProperties.getCustomerReturnRequestApprovedTemplate(),
+            RETURN_REQUEST_PREFIX + ReturnRequest.ReturnRequestStatus.REJECTED.name(),
+                mailgunProperties.getCustomerReturnRequestRejectedTemplate(),
+            RETURN_REQUEST_PREFIX + ReturnRequest.ReturnRequestStatus.REFUND_COMPLETED.name(),
+                mailgunProperties.getCustomerReturnRequestRefundCompletedTemplate()
+        );
+    }
+
+    private Map<String, String> makeReturnRequestSubjectsMap() {
+        return Map.of(
+            RETURN_REQUEST_PREFIX + ReturnRequest.ReturnRequestStatus.PENDING.name(),
+                internalMailingIntegrationProperties.getCustomerReturnRequestCreatedSubject(),
+            RETURN_REQUEST_PREFIX + ReturnRequest.ReturnRequestStatus.APPROVED.name(),
+                internalMailingIntegrationProperties.getCustomerReturnRequestApprovedSubject(),
+            RETURN_REQUEST_PREFIX + ReturnRequest.ReturnRequestStatus.REJECTED.name(),
+                internalMailingIntegrationProperties.getCustomerReturnRequestRejectedSubject(),
+            RETURN_REQUEST_PREFIX + ReturnRequest.ReturnRequestStatus.REFUND_COMPLETED.name(),
+                internalMailingIntegrationProperties.getCustomerReturnRequestRefundCompletedSubject()
         );
     }
 

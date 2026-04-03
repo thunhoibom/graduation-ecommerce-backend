@@ -11,12 +11,14 @@ import org.monostudio.jpa.entities.Product;
 import org.monostudio.jpa.entities.ProductCategory;
 import org.monostudio.jpa.entities.ProductImage;
 import org.monostudio.jpa.repositories.ProductImagesRepository;
+import org.monostudio.jpa.repositories.ProductReviewsRepository;
 import org.monostudio.jpa.repositories.ProductsCategoriesRepository;
 import org.monostudio.jpa.services.conversion.ImagesConverterService;
 import org.monostudio.jpa.services.conversion.ProductCategoriesConverterService;
 import org.monostudio.jpa.services.conversion.ProductsConverterService;
 
 import java.util.Collection;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Transactional
@@ -27,18 +29,21 @@ public class ProductsConverterServiceImpl
     private final ImagesConverterService imagesConverterService;
     private final ProductsCategoriesRepository productsCategoriesRepository;
     private final ProductCategoriesConverterService productCategoriesConverterService;
+    private final ProductReviewsRepository productReviewsRepository;
 
     @Autowired
     public ProductsConverterServiceImpl(
         ProductImagesRepository productImagesRepository,
         ImagesConverterService imagesConverterService,
         ProductsCategoriesRepository productsCategoriesRepository,
-        ProductCategoriesConverterService productCategoriesConverterService
+        ProductCategoriesConverterService productCategoriesConverterService,
+        ProductReviewsRepository productReviewsRepository
     ) {
         this.productImagesRepository = productImagesRepository;
         this.imagesConverterService = imagesConverterService;
         this.productsCategoriesRepository = productsCategoriesRepository;
         this.productCategoriesConverterService = productCategoriesConverterService;
+        this.productReviewsRepository = productReviewsRepository;
     }
 
     @Override
@@ -57,7 +62,25 @@ public class ProductsConverterServiceImpl
             ProductCategoryPojo categoryPojo = productCategoriesConverterService.convertToPojo(category);
             target.setCategory(categoryPojo);
         }
+
+        // Populate review statistics
+        populateReviewStats(source.getId(), target);
+
         return target;
+    }
+
+    /**
+     * Populate review statistics for a product.
+     * Called internally by convertToPojo. Safe to call from admin contexts
+     * to include stats when returning product data.
+     */
+    public void populateReviewStats(Long productId, ProductPojo target) {
+        long totalApproved = productReviewsRepository.countByProductIdAndApprovedTrue(productId);
+        if (totalApproved > 0) {
+            target.setTotalReviews((int) totalApproved);
+            Optional<Double> avgOpt = productReviewsRepository.findAverageRatingByProductId(productId);
+            avgOpt.ifPresent(avg -> target.setAverageRating(Math.round(avg * 10.0) / 10.0));
+        }
     }
 
     @Override
@@ -92,11 +115,6 @@ public class ProductsConverterServiceImpl
             .map(imagesConverterService::convertToPojo)
             .distinct()
             .collect(Collectors.toList());
-    }
-
-    @Override
-    public Product applyChangesToExistingEntity(ProductPojo source, Product target) {
-        throw new UnsupportedOperationException("This method is deprecated");
     }
 
 }

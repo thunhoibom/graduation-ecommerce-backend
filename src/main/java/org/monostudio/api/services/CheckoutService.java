@@ -1,5 +1,6 @@
 package org.monostudio.api.services;
 
+import org.monostudio.api.models.CheckoutStartRequest;
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.common.exceptions.BadInputException;
@@ -14,6 +15,19 @@ import java.net.URI;
  * redirect them to a result page.
  */
 public interface CheckoutService {
+
+    /**
+     * Full checkout start: validates cart items against available stock, reserves stock,
+     * computes shipping fee, applies any discount, creates the order in PENDING status,
+     * and returns a payment URL (Webpay Plus).
+     *
+     * @param request The checkout start request containing cart items, shipping method, etc.
+     * @return Payment redirection details with URL and token
+     * @throws BadInputException        if cart data, shipping method, or discount code is invalid
+     * @throws PaymentServiceException  if the payment gateway fails
+     */
+    PaymentRedirectionDetailsPojo startCheckout(CheckoutStartRequest request)
+        throws BadInputException, PaymentServiceException;
 
     /**
      * Fetch details to redirect the requester to the payment page; mark transaction as "started";

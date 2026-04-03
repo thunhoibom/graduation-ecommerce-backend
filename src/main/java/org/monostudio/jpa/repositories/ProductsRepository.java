@@ -35,4 +35,16 @@ public interface ProductsRepository
     @Transactional
     @Query("UPDATE Product p SET p.productCategory = null WHERE p.productCategory IN (:categories)")
     void orphanizeByCategories(@Param("categories") Collection<ProductCategory> categories);
+
+    /**
+     * Atomically decrements the stock of a product.
+     * Used when an order is paid and there is no ProductVariant.
+     *
+     * @param id  the product ID
+     * @param qty the quantity to deduct (must be positive)
+     */
+    @Modifying
+    @Transactional
+    @Query("UPDATE Product p SET p.stockCurrent = p.stockCurrent - :qty WHERE p.id = :id AND p.stockCurrent >= :qty")
+    void decrementStock(@Param("id") Long id, @Param("qty") int qty);
 }

@@ -18,13 +18,15 @@ import org.monostudio.jpa.entities.Customer;
 import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.entities.OrderDetail;
 import org.monostudio.jpa.entities.Product;
-import org.monostudio.jpa.entities.Shipper;
+import org.monostudio.jpa.entities.ProductVariant;
+import org.monostudio.jpa.entities.ShippingMethod;
 import org.monostudio.jpa.repositories.AddressesRepository;
 import org.monostudio.jpa.repositories.BillingTypesRepository;
 import org.monostudio.jpa.repositories.PaymentTypesRepository;
 import org.monostudio.jpa.repositories.ProductsRepository;
+import org.monostudio.jpa.repositories.ProductVariantsRepository;
 import org.monostudio.jpa.repositories.OrderStatusesRepository;
-import org.monostudio.jpa.repositories.ShippersRepository;
+import org.monostudio.jpa.repositories.ShippingMethodsRepository;
 import org.monostudio.jpa.services.conversion.AddressesConverterService;
 import org.monostudio.jpa.services.conversion.BillingCompaniesConverterService;
 import org.monostudio.jpa.services.conversion.CustomersConverterService;
@@ -54,7 +56,8 @@ public class OrdersConverterServiceImpl
     private final SalespeopleConverterService salespeopleConverterService;
     private final ProductsConverterService productConverterService;
     private final ProductsRepository productsRepository;
-    private final ShippersRepository shippersRepository;
+    private final ProductVariantsRepository productVariantsRepository;
+    private final ShippingMethodsRepository shippingMethodsRepository;
     private final AddressesRepository addressesRepository;
     private final PaymentTypesRepository paymentTypesRepository;
     private final OrderStatusesRepository orderStatusesRepository;
@@ -72,7 +75,8 @@ public class OrdersConverterServiceImpl
         SalespeopleConverterService salespeopleConverterService,
         ProductsConverterService productConverterService,
         ProductsRepository productsRepository,
-        ShippersRepository shippersRepository,
+        ProductVariantsRepository productVariantsRepository,
+        ShippingMethodsRepository shippingMethodsRepository,
         AddressesRepository addressesRepository,
         PaymentTypesRepository paymentTypesRepository,
         OrderStatusesRepository orderStatusesRepository,
@@ -86,7 +90,8 @@ public class OrdersConverterServiceImpl
         this.salespeopleConverterService = salespeopleConverterService;
         this.productConverterService = productConverterService;
         this.productsRepository = productsRepository;
-        this.shippersRepository = shippersRepository;
+        this.productVariantsRepository = productVariantsRepository;
+        this.shippingMethodsRepository = shippingMethodsRepository;
         this.addressesRepository = addressesRepository;
         this.paymentTypesRepository = paymentTypesRepository;
         this.orderStatusesRepository = orderStatusesRepository;
@@ -119,8 +124,8 @@ public class OrdersConverterServiceImpl
             target.setBillingCompany(targetBillingCompany);
         }
 
-        if (source.getShipper()!=null) {
-            target.setShipper(source.getShipper().getName());
+        if (source.getShippingMethod()!=null) {
+            target.setShipper(source.getShippingMethod().getName());
         }
 
         if (source.getSalesperson()!=null) {
@@ -167,26 +172,45 @@ public class OrdersConverterServiceImpl
 
     /**
      * Converts a detail of the sell into a new entity counterpart.<br/>
-     * Its product is matched against the records via its barcode.
-     * The value of the unit is set the same as the product's.
+     * If variantId is set, looks up the ProductVariant to resolve product and unit value.
+     * Otherwise falls back to barcode lookup on Product (legacy path).
      */
     @Override
     public OrderDetail convertDetailToNewEntity(OrderDetailPojo detail) throws RuntimeException {
         try {
-            String barcode = detail.getProduct().getBarcode();
-            if (StringUtils.isBlank(barcode)) {
-                throw new BadInputException("Product barcode must be valid");
+            Product product;
+            ProductVariant variant = null;
+            int unitValue;
+
+            if (detail.getVariantId() != null) {
+                // Variant path — resolve variant and product from variantId
+                variant = productVariantsRepository.findById(detail.getVariantId())
+                    .orElseThrow(() -> new BadInputException("Variant not found: " + detail.getVariantId()));
+                product = variant.getProduct();
+                // Use provided unit value if set; otherwise compute from product + variant modifier
+                unitValue = detail.getUnitValue() > 0
+                    ? detail.getUnitValue()
+                    : product.getPrice() + variant.getPriceModifier();
+            } else {
+                // Legacy path — resolve by barcode
+                String barcode = detail.getProduct() != null ? detail.getProduct().getBarcode() : null;
+                if (StringUtils.isBlank(barcode)) {
+                    throw new BadInputException("Product barcode must be valid when no variantId is provided");
+                }
+                Optional<Product> productOpt = productsRepository.findByBarcode(barcode);
+                if (productOpt.isEmpty()) {
+                    throw new BadInputException("Unexisting product in sell details");
+                }
+                product = productOpt.get();
+                unitValue = detail.getUnitValue() > 0 ? detail.getUnitValue() : product.getPrice();
             }
-            Optional<Product> productByBarcode = productsRepository.findByBarcode(barcode);
-            if (productByBarcode.isEmpty()) {
-                throw new BadInputException("Unexisting product in sell details");
-            }
-            Product product = productByBarcode.get();
+
             String description = detail.getUnits() + "x " + product.getName();
             return OrderDetail.builder()
                 .units(detail.getUnits())
                 .product(product)
-                .unitValue(product.getPrice())
+                .productVariant(variant)
+                .unitValue(unitValue)
                 .description(description)
                 .build();
         } catch (BadInputException exc) {
@@ -264,18 +288,18 @@ public class OrdersConverterServiceImpl
 
     /**
      * Checks whether the order included shipping information, and if so, tries to deduce it.<br/>
-     * Tries to find the requested shipper, and the shipping address.
+     * Tries to find the requested shipping method, and the shipping address.
      * In the case of the address only, it may create a new record.
      */
     private void convertShippingInformationForEntity(OrderPojo model, Order target) throws BadInputException {
         String pojoShipperName = model.getShipper();
         AddressPojo pojoShippingAddress = model.getShippingAddress();
         if (!StringUtils.isBlank(pojoShipperName)) {
-            Optional<Shipper> existingShipper = shippersRepository.findByName(pojoShipperName);
-            if (existingShipper.isEmpty()) {
-                throw new BadInputException("Specified shipper does not exist");
+            Optional<ShippingMethod> existingShippingMethod = shippingMethodsRepository.findByName(pojoShipperName);
+            if (existingShippingMethod.isEmpty()) {
+                throw new BadInputException("Specified shipping method does not exist");
             }
-            target.setShipper(existingShipper.get());
+            target.setShippingMethod(existingShippingMethod.get());
             Optional<Address> existingShippingAddress = this.findAddress(pojoShippingAddress);
             if (existingShippingAddress.isEmpty()) {
                 Address address = addressesConverterService.convertToNewEntity(pojoShippingAddress);

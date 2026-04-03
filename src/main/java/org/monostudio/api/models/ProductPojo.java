@@ -31,4 +31,10 @@ public class ProductPojo {
     private Integer criticalStock;
     private ProductCategoryPojo category;
     private Collection<ImagePojo> images;
+
+    // --- Review statistics (populated when including review stats) ---
+    /** Average rating across approved reviews (1 decimal place), null if no reviews */
+    private Double averageRating;
+    /** Total count of approved reviews */
+    private Integer totalReviews;
 }

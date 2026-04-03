@@ -26,4 +26,8 @@ public class MailgunMailingProperties {
     private String ownerOrderConfirmationTemplate;
     private String ownerOrderRejectionTemplate;
     private String ownerOrderCompletionTemplate;
+    private String customerReturnRequestCreatedTemplate;
+    private String customerReturnRequestApprovedTemplate;
+    private String customerReturnRequestRejectedTemplate;
+    private String customerReturnRequestRefundCompletedTemplate;
 }

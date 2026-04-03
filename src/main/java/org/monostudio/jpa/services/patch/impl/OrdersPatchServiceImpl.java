@@ -9,7 +9,7 @@ import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.repositories.PaymentTypesRepository;
 import org.monostudio.jpa.repositories.OrderStatusesRepository;
-import org.monostudio.jpa.repositories.ShippersRepository;
+import org.monostudio.jpa.repositories.ShippingMethodsRepository;
 import org.monostudio.jpa.services.patch.OrdersPatchService;
 
 import java.time.Instant;
@@ -21,17 +21,17 @@ public class OrdersPatchServiceImpl
     implements OrdersPatchService {
     private final OrderStatusesRepository statusesRepository;
     private final PaymentTypesRepository paymentTypesRepository;
-    private final ShippersRepository shippersRepository;
+    private final ShippingMethodsRepository shippingMethodsRepository;
 
     @Autowired
     public OrdersPatchServiceImpl(
         OrderStatusesRepository statusesRepository,
         PaymentTypesRepository paymentTypesRepository,
-        ShippersRepository shippersRepository
+        ShippingMethodsRepository shippingMethodsRepository
     ) {
         this.statusesRepository = statusesRepository;
         this.paymentTypesRepository = paymentTypesRepository;
-        this.shippersRepository = shippersRepository;
+        this.shippingMethodsRepository = shippingMethodsRepository;
     }
 
     @Transactional
@@ -65,7 +65,7 @@ public class OrdersPatchServiceImpl
             if (changes.containsKey("shipper")) {
                 String shipperName = (String) changes.get("shipper");
                 if (!StringUtils.isBlank(shipperName)) {
-                    shippersRepository.findByName(shipperName).ifPresent(target::setShipper);
+                    shippingMethodsRepository.findByName(shipperName).ifPresent(target::setShippingMethod);
                 }
             }
         } catch (ClassCastException ex) {

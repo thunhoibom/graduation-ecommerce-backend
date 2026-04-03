@@ -82,9 +82,9 @@ public class Order
     @JoinColumn(name = "billing_address_id", updatable = false)
     @ManyToOne(cascade = {CascadeType.PERSIST, CascadeType.REFRESH, CascadeType.MERGE}, fetch = FetchType.LAZY)
     private Address billingAddress;
-    @JoinColumn(name = "shipper_id", updatable = false)
+    @JoinColumn(name = "shipping_method_id", updatable = false)
     @ManyToOne(cascade = CascadeType.REFRESH, fetch = FetchType.LAZY)
-    private Shipper shipper;
+    private ShippingMethod shippingMethod;
     @JoinColumn(name = "shipping_address_id", updatable = false)
     @ManyToOne(cascade = {CascadeType.PERSIST, CascadeType.REFRESH, CascadeType.MERGE}, fetch = FetchType.LAZY)
     private Address shippingAddress;
@@ -121,7 +121,7 @@ public class Order
         this.customer = null;
         this.details = null;
         this.billingCompany = null;
-        this.shipper = null;
+        this.shippingMethod = null;
         this.shippingAddress = null;
         this.salesperson = null;
     }

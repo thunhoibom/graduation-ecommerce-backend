@@ -9,6 +9,7 @@ import lombok.Setter;
 import lombok.ToString;
 import org.monostudio.jpa.DBEntity;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -18,8 +19,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 
 @Entity
 @Table(
@@ -62,7 +65,24 @@ public class Product
     private ProductCategory productCategory;
 
     /**
-     * Please note: this copy-constructor does not include a Product's relationship to a ProductCategory.
+     * All size/color variants for this product.
+     * Managed by ProductVariant CRUD — cascade ALL ensures variants are persisted/removed with the product.
+     */
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @ToString.Exclude
+    private List<ProductVariant> variants;
+
+    /**
+     * All reviews for this product.
+     * Cascade REMOVE ensures reviews are deleted when product is deleted.
+     */
+    @OneToMany(mappedBy = "product", cascade = CascadeType.REMOVE, fetch = FetchType.LAZY)
+    @ToString.Exclude
+    private List<ProductReview> reviews;
+
+    /**
+     * Please note: this copy-constructor does not include a Product's relationship to a ProductCategory,
+     * Variants, or Reviews.
      *
      * @param source The original Product
      */

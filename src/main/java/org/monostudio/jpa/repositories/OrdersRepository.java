@@ -7,6 +7,8 @@ import org.monostudio.jpa.Repository;
 import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.entities.OrderStatus;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @org.springframework.stereotype.Repository
@@ -31,4 +33,140 @@ public interface OrdersRepository
         + "SET s.transactionToken = :token "
         + "WHERE s.id = :id")
     int setTransactionToken(@Param("id") Long id, @Param("token") String token);
+
+    // ─── Admin Dashboard Queries ──────────────────────────────────────────────
+
+    /**
+     * Count orders by status (all-time or within a date range).
+     */
+    @Query("SELECT s.status.name AS status, COUNT(s) AS count "
+        + "FROM Order s "
+        + "WHERE (:from IS NULL OR s.date >= :from) "
+        + "AND (:to IS NULL OR s.date <= :to) "
+        + "GROUP BY s.status.name")
+    List<OrderStatusCountProjection> countByStatusGrouped(
+        @Param("from") Instant from,
+        @Param("to") Instant to);
+
+    /**
+     * Total revenue (sum of totalValue) within a date range.
+     */
+    @Query("SELECT COALESCE(SUM(s.totalValue), 0) "
+        + "FROM Order s "
+        + "WHERE s.status.name = :completedStatus "
+        + "AND s.date >= :from AND s.date <= :to")
+    long sumRevenueByStatusAndDateBetween(
+        @Param("completedStatus") String completedStatus,
+        @Param("from") Instant from,
+        @Param("to") Instant to);
+
+    /**
+     * Total order count within a date range (any status).
+     */
+    @Query("SELECT COUNT(s) "
+        + "FROM Order s "
+        + "WHERE s.date >= :from AND s.date <= :to")
+    long countByDateBetween(
+        @Param("from") Instant from,
+        @Param("to") Instant to);
+
+    /**
+     * Revenue broken down by day.
+     * Uses native SQL for DATE() truncation — PostgreSQL compatible.
+     */
+    @Query(value = """
+        SELECT DATE(o.order_date)               AS periodDate,
+               COALESCE(SUM(o.order_total_value), 0) AS revenue,
+               COUNT(o.order_id)                AS orderCount
+        FROM   orders o
+        WHERE  o.order_date >= :from
+          AND  o.order_date <= :to
+        GROUP  BY DATE(o.order_date)
+        ORDER  BY periodDate ASC
+        """, nativeQuery = true)
+    List<RevenueByPeriodProjection> revenueByDay(
+        @Param("from") Instant from,
+        @Param("to") Instant to);
+
+    /**
+     * Revenue broken down by week (ISO week, starts Monday).
+     * PostgreSQL compatible.
+     */
+    @Query(value = """
+        SELECT DATE(DATE_TRUNC('week', o.order_date)) AS periodDate,
+               COALESCE(SUM(o.order_total_value), 0)  AS revenue,
+               COUNT(o.order_id)                      AS orderCount
+        FROM   orders o
+        WHERE  o.order_date >= :from
+          AND  o.order_date <= :to
+        GROUP  BY DATE(DATE_TRUNC('week', o.order_date))
+        ORDER  BY periodDate ASC
+        """, nativeQuery = true)
+    List<RevenueByPeriodProjection> revenueByWeek(
+        @Param("from") Instant from,
+        @Param("to") Instant to);
+
+    /**
+     * Revenue broken down by month.
+     * PostgreSQL compatible.
+     */
+    @Query(value = """
+        SELECT DATE(DATE_TRUNC('month', o.order_date)) AS periodDate,
+               COALESCE(SUM(o.order_total_value), 0)   AS revenue,
+               COUNT(o.order_id)                       AS orderCount
+        FROM   orders o
+        WHERE  o.order_date >= :from
+          AND  o.order_date <= :to
+        GROUP  BY DATE(DATE_TRUNC('month', o.order_date))
+        ORDER  BY periodDate ASC
+        """, nativeQuery = true)
+    List<RevenueByPeriodProjection> revenueByMonth(
+        @Param("from") Instant from,
+        @Param("to") Instant to);
+
+    /**
+     * Top products by units sold, within a date range.
+     * Joins orders → order_details → products.
+     * Only counts PAID/CONFIRMED/COMPLETED orders to reflect actual revenue.
+     */
+    @Query(value = """
+        SELECT p.product_id                                          AS productId,
+               p.product_name                                        AS productName,
+               COALESCE(SUM(od.order_detail_units), 0)              AS unitsSold,
+               COALESCE(SUM(od.order_detail_units * od.order_detail_unit_value), 0) AS revenue
+        FROM   order_details od
+        JOIN   orders o ON od.order_id = o.order_id
+        JOIN   products p ON od.product_id = p.product_id
+        WHERE  o.order_date >= :from
+          AND  o.order_date <= :to
+          AND  o.order_status_id IN (
+                   SELECT os.order_status_id
+                   FROM   order_statuses os
+                   WHERE  os.order_status_name IN ('Paid, Confirmed', 'Delivery Complete')
+               )
+        GROUP  BY p.product_id, p.product_name
+        ORDER  BY unitsSold DESC
+        LIMIT  :limit
+        """, nativeQuery = true)
+    List<TopProductProjection> findTopProductsByUnitsSold(
+        @Param("from") Instant from,
+        @Param("to") Instant to,
+        @Param("limit") int limit);
+
+    /**
+     * Check whether a customer has at least one completed (paid/confirmed) order containing a specific product.
+     * Used to determine verified purchase status for product reviews.
+     */
+    @Query("""
+        SELECT COUNT(od) > 0
+        FROM   OrderDetail od
+        JOIN   od.order o
+        JOIN   o.status os
+        WHERE  o.customer.id = :customerId
+          AND  od.product.id = :productId
+          AND  os.name IN ('Paid, Confirmed', 'Delivery Complete')
+        """)
+    boolean hasCompletedOrderWithProduct(
+        @Param("customerId") Long customerId,
+        @Param("productId") Long productId);
 }
