@@ -38,7 +38,7 @@ public class DiscountCodesCrudServiceImpl
     @Transactional
     public DiscountCodePojo create(DiscountCodePojo input) throws BadInputException, EntityExistsException {
         this.validateInputPojoBeforeCreation(input);
-        DiscountCode prepared = ((DiscountCodesConverterService) converter).convertToNewEntity(input);
+        DiscountCode prepared = converter.convertToNewEntity(input);
         DiscountCode persistent = discountCodesRepository.saveAndFlush(prepared);
         return converter.convertToPojo(persistent);
     }
@@ -47,7 +47,7 @@ public class DiscountCodesCrudServiceImpl
     @Transactional
     public Optional<DiscountCodePojo> update(DiscountCodePojo input, Long id)
         throws EntityNotFoundException, BadInputException {
-        DiscountCode prepared = ((DiscountCodesConverterService) converter).convertToNewEntity(input);
+        DiscountCode prepared = converter.convertToNewEntity(input);
         prepared.setId(id);
         DiscountCode persistent = discountCodesRepository.saveAndFlush(prepared);
         return Optional.of(converter.convertToPojo(persistent));

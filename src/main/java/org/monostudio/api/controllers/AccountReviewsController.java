@@ -18,6 +18,7 @@ import org.monostudio.jpa.entities.User;
 import org.monostudio.jpa.repositories.CustomersRepository;
 import org.monostudio.jpa.repositories.UsersRepository;
 import org.monostudio.jpa.services.crud.ProductReviewsCrudService;
+import org.monostudio.common.exceptions.BadInputException;
 
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
@@ -59,7 +60,7 @@ public class AccountReviewsController {
     public ProductReviewPojo submitReview(
         @Valid @RequestBody ProductReviewPojo input,
         Principal principal
-    ) {
+    ) throws BadInputException {
         Long customerId = resolveCustomerId(principal);
         return productReviewsCrudService.createReview(input, customerId);
     }

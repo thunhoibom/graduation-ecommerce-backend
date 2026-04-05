@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.monostudio.api.models.RefundResultPojo;
 import org.monostudio.api.models.ReturnRequestItemPojo;
 import org.monostudio.api.models.ReturnRequestPojo;
 import org.monostudio.api.services.ReturnRequestService;
@@ -21,6 +22,8 @@ import org.monostudio.jpa.services.crud.ReturnRequestsCrudService;
 import org.monostudio.api.services.StockAdjustmentService;
 import org.monostudio.mailing.MailingService;
 import org.monostudio.mailing.MailingServiceException;
+import org.monostudio.payment.PaymentService;
+import org.monostudio.payment.PaymentServiceException;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
@@ -40,6 +43,7 @@ public class ReturnRequestServiceImpl
     private final ReturnRequestsConverterService converterService;
     private final StockAdjustmentService stockAdjustmentService;
     private final MailingService mailingService;
+    private final PaymentService paymentIntegrationService;
 
     @Autowired
     public ReturnRequestServiceImpl(
@@ -49,7 +53,8 @@ public class ReturnRequestServiceImpl
         ReturnRequestsCrudService crudService,
         ReturnRequestsConverterService converterService,
         StockAdjustmentService stockAdjustmentService,
-        MailingService mailingService
+        MailingService mailingService,
+        PaymentService paymentIntegrationService
     ) {
         this.returnRequestsRepository = returnRequestsRepository;
         this.itemsRepository = itemsRepository;
@@ -58,6 +63,7 @@ public class ReturnRequestServiceImpl
         this.converterService = converterService;
         this.stockAdjustmentService = stockAdjustmentService;
         this.mailingService = mailingService;
+        this.paymentIntegrationService = paymentIntegrationService;
     }
 
     @Override
@@ -85,13 +91,9 @@ public class ReturnRequestServiceImpl
             throw new BadInputException(INVALID_STATE);
         }
 
-        // Release reserved stock for each item
         List<ReturnRequestItem> items = itemsRepository.findByReturnRequestId(id);
-        for (ReturnRequestItem item : items) {
-            restoreVariantStock(item);
-        }
 
-        // Update status to APPROVED
+        // Update status to APPROVED — stock restore is done in markAsReceived, not here.
         existing.setStatus(ReturnRequest.ReturnRequestStatus.APPROVED);
         if (adminNotes != null) {
             existing.setAdminNotes(adminNotes);
@@ -150,13 +152,19 @@ public class ReturnRequestServiceImpl
             throw new BadInputException(INVALID_STATE);
         }
 
+        List<ReturnRequestItem> items = itemsRepository.findByReturnRequestId(id);
+
+        // Restore stock to the specific variant — done when warehouse confirms receipt of returned goods.
+        for (ReturnRequestItem item : items) {
+            restoreVariantStock(item);
+        }
+
         existing.setStatus(ReturnRequest.ReturnRequestStatus.RECEIVED);
         if (adminNotes != null) {
             existing.setAdminNotes(adminNotes);
         }
 
         ReturnRequest saved = returnRequestsRepository.saveAndFlush(existing);
-        List<ReturnRequestItem> items = itemsRepository.findByReturnRequestId(id);
         ReturnRequestPojo pojo = buildReturnRequestPojo(saved, items);
         try {
             mailingService.notifyReturnRequestStatusToClient(pojo);
@@ -175,6 +183,25 @@ public class ReturnRequestServiceImpl
         if (existing.getStatus() != ReturnRequest.ReturnRequestStatus.RECEIVED
             && existing.getStatus() != ReturnRequest.ReturnRequestStatus.REFUND_PROCESSING) {
             throw new BadInputException(INVALID_STATE);
+        }
+
+        // Call the payment gateway refund API if the original transaction token is available.
+        Integer refundAmount = existing.getRefundAmount();
+        String token = existing.getOrder() != null ? existing.getOrder().getTransactionToken() : null;
+        if (token != null && refundAmount != null && refundAmount > 0) {
+            try {
+                RefundResultPojo result = paymentIntegrationService.refund(token, refundAmount);
+                if (result.isSuccess()) {
+                    logger.info("Refund succeeded for return {}: type={}, code={}",
+                        id, result.getType(), result.getResponseCode());
+                } else {
+                    logger.warn("Refund rejected by gateway for return {}: code={}",
+                        id, result.getResponseCode());
+                }
+            } catch (PaymentServiceException e) {
+                // Log but do not block — admin must handle manually if refund gateway fails.
+                logger.error("Refund gateway error for return {}: {}", id, e.getMessage());
+            }
         }
 
         existing.setStatus(ReturnRequest.ReturnRequestStatus.REFUND_COMPLETED);
@@ -228,12 +255,31 @@ public class ReturnRequestServiceImpl
     }
 
     /**
-     * Restores stock to the ProductVariant when a return is approved.
-     * The ReturnRequestItem carries a productId; we look up active variants
-     * belonging to that product and restore stock to each.
+     * Restores stock when returned goods are received at the warehouse.
+     *
+     * Priority: restore to the exact variant if available (variantId field is set).
+     * Fallback: restore to all active variants of the product (legacy behavior).
+     *
+     * Stock is restored ONLY at RECEIVED, not at approval — store must physically
+     * receive and inspect the goods before returning them to sellable inventory.
      */
     private void restoreVariantStock(ReturnRequestItem item) {
+        // Preferred path: restore to the exact variant that was purchased
+        if (item.getVariant() != null && item.getVariant().getId() != null) {
+            ProductVariant variant = productVariantsRepository.getById(item.getVariant().getId());
+            if (variant != null) {
+                variant.setStockCurrent(variant.getStockCurrent() + item.getQuantity());
+                productVariantsRepository.saveAndFlush(variant);
+                logger.info("Restored {} units to variant {} (return)",
+                    item.getQuantity(), variant.getSku());
+            }
+            return;
+        }
+
+        // Fallback: no variant recorded — restore to all active variants of the product
         if (item.getProduct() == null || item.getProduct().getId() == null) {
+            logger.warn("Return item {} has neither variant nor product — cannot restore stock",
+                item.getId());
             return;
         }
         List<ProductVariant> variants = productVariantsRepository.findByProductId(item.getProduct().getId());
@@ -241,6 +287,8 @@ public class ReturnRequestServiceImpl
             if (variant.isActive()) {
                 variant.setStockCurrent(variant.getStockCurrent() + item.getQuantity());
                 productVariantsRepository.saveAndFlush(variant);
+                logger.info("Restored {} units to variant {} (return, fallback path)",
+                    item.getQuantity(), variant.getSku());
             }
         }
     }

@@ -84,6 +84,12 @@ public class ProductsConverterServiceImpl
     }
 
     @Override
+    @Deprecated(forRemoval = true, since = "0.2.0-SNAPSHOT")
+    public Product applyChangesToExistingEntity(ProductPojo source, Product target) {
+        return convertToNewEntity(source); // deprecated — use PatchService instead
+    }
+
+    @Override
     public Product convertToNewEntity(ProductPojo source) {
         Product target = Product.builder()
             .name(source.getName())

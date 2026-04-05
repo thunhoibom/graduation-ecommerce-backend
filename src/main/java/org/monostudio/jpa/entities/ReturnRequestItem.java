@@ -64,6 +64,14 @@ public class ReturnRequestItem
     private Product product;
 
     /**
+     * The specific variant being returned.
+     * Preferred over product when available — ensures stock is restored to the correct variant.
+     */
+    @JoinColumn(name = "return_request_item_variant_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    private ProductVariant variant;
+
+    /**
      * Please note: this copy-constructor does not include relationships.
      *
      * @param source The original ReturnRequestItem

@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.ProductPojo;
 import org.monostudio.api.models.OrderDetailPojo;
 import org.monostudio.api.models.OrderPojo;
+import org.monostudio.api.models.RefundResultPojo;
 import org.monostudio.mailing.MailingService;
 import org.monostudio.mailing.MailingServiceException;
 import org.monostudio.api.services.DiscountService;
@@ -21,14 +22,19 @@ import org.monostudio.jpa.repositories.OrderStatusesRepository;
 import org.monostudio.jpa.services.conversion.ProductsConverterService;
 import org.monostudio.jpa.services.conversion.OrdersConverterService;
 import org.monostudio.jpa.services.crud.OrdersCrudService;
+import org.monostudio.payment.PaymentService;
+import org.monostudio.payment.PaymentServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.persistence.EntityNotFoundException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import static org.monostudio.config.Constants.ORDER_STATUS_ADMIN_CANCELLED;
 import static org.monostudio.config.Constants.ORDER_STATUS_COMPLETED;
 import static org.monostudio.config.Constants.ORDER_STATUS_PAID_CONFIRMED;
 import static org.monostudio.config.Constants.ORDER_STATUS_PAID_UNCONFIRMED;
@@ -55,6 +61,7 @@ public class OrdersProcessServiceImpl
     private final MailingService mailingService;
     private final StockReservationService stockReservationService;
     private final DiscountService discountService;
+    private final PaymentService paymentService;
 
     public OrdersProcessServiceImpl(
         OrdersCrudService crudService,
@@ -65,7 +72,8 @@ public class OrdersProcessServiceImpl
         ProductsConverterService productConverterService,
         @Autowired(required = false) MailingService mailingService,
         StockReservationService stockReservationService,
-        DiscountService discountService
+        DiscountService discountService,
+        @Autowired(required = false) PaymentService paymentService
     ) {
         this.crudService = crudService;
         this.ordersRepository = ordersRepository;
@@ -76,6 +84,7 @@ public class OrdersProcessServiceImpl
         this.mailingService = mailingService;
         this.stockReservationService = stockReservationService;
         this.discountService = discountService;
+        this.paymentService = paymentService;
     }
 
     private void sendClientEmail(OrderPojo order) {
@@ -194,8 +203,6 @@ public class OrdersProcessServiceImpl
         List<OrderDetailPojo> pojoDetails = new ArrayList<>();
         for (OrderDetail detail : orderDetailsRepository.findBySellId(existingOrder.getId())) {
             ProductPojo productPojo = productConverterService.convertToPojo(detail.getProduct());
-            String variantSku = detail.getProductVariant() != null
-                ? detail.getProductVariant().getSku() : null;
             OrderDetailPojo orderDetailPojo = OrderDetailPojo.builder()
                 .units(detail.getUnits())
                 .unitValue(detail.getUnitValue())
@@ -306,6 +313,15 @@ public class OrdersProcessServiceImpl
         target.setDetails(pojoDetails);
         target.setStatus(ORDER_STATUS_REJECTED);
 
+        // Release reserved stock — the order was rejected, so the items go back to available inventory.
+        // Note: since stock was already confirmed at markAsPaid, releasing here means decrementing
+        // stockReserved only (the confirmed reservation record). stockCurrent stays unchanged —
+        // the items have physically left the warehouse. Only non-confirmed reservations (if any)
+        // would need their stockCurrent restored. Here we release the reservation records.
+        if (existingOrder.getCartSessionToken() != null) {
+            stockReservationService.release(existingOrder.getCartSessionToken());
+        }
+
         sendClientEmail(target);
         sendOwnerEmail(target);
 
@@ -345,6 +361,91 @@ public class OrdersProcessServiceImpl
         sendClientEmail(target);
 
         return target;
+    }
+
+    @Override
+    public OrderPojo markAsAdminCancelled(OrderPojo sell, String reason)
+        throws BadInputException, EntityNotFoundException {
+        Order existingOrder = fetchExistingOrThrowException(sell);
+
+        String currentStatus = existingOrder.getStatus().getName();
+        boolean canCancel =
+            currentStatus.equals(ORDER_STATUS_PENDING)
+            || currentStatus.equals(ORDER_STATUS_PAYMENT_STARTED)
+            || currentStatus.equals(ORDER_STATUS_PAID_UNCONFIRMED)
+            || currentStatus.equals(ORDER_STATUS_PAID_CONFIRMED);
+
+        if (!canCancel) {
+            throw new BadInputException(
+                "Cannot cancel order in status '" + currentStatus + "'");
+        }
+
+        Optional<OrderStatus> cancelledStatus =
+            orderStatusesRepository.findByName(ORDER_STATUS_ADMIN_CANCELLED);
+        if (cancelledStatus.isEmpty()) {
+            throw new IllegalStateException(
+                "Status '" + ORDER_STATUS_ADMIN_CANCELLED
+                    + "' not found in DB — has it been seeded?");
+        }
+        ordersRepository.setStatus(existingOrder.getId(), cancelledStatus.get());
+
+        OrderPojo target = convertOrThrowException(existingOrder);
+        target.setStatus(ORDER_STATUS_ADMIN_CANCELLED);
+
+        // Release any outstanding stock reservations (e.g. if cancelled before payment was confirmed).
+        if (existingOrder.getCartSessionToken() != null) {
+            stockReservationService.release(existingOrder.getCartSessionToken());
+        }
+
+        // If payment was already made, trigger a refund through the payment gateway.
+        boolean wasPaid = currentStatus.equals(ORDER_STATUS_PAID_UNCONFIRMED)
+            || currentStatus.equals(ORDER_STATUS_PAID_CONFIRMED);
+        if (wasPaid && existingOrder.getTransactionToken() != null && paymentService != null) {
+            try {
+                RefundResultPojo result = paymentService.refund(
+                    existingOrder.getTransactionToken(),
+                    existingOrder.getTotalValue()
+                );
+                if (result.isSuccess()) {
+                    logger.info("Admin cancelled order {}: refund triggered, type={}",
+                        existingOrder.getId(), result.getType());
+                } else {
+                    logger.warn("Admin cancelled order {}: refund call returned code={}",
+                        existingOrder.getId(), result.getResponseCode());
+                }
+            } catch (PaymentServiceException e) {
+                // Log but do not block — admin must handle refund manually if gateway fails.
+                logger.error("Admin cancelled order {}: refund gateway error: {}",
+                    existingOrder.getId(), e.getMessage());
+            }
+        }
+
+        logger.info("Order {} admin-cancelled. Reason: {}. WasPaid: {}",
+            existingOrder.getId(), reason, wasPaid);
+        sendClientEmail(target);
+        sendOwnerEmail(target);
+
+        return target;
+    }
+
+    @Override
+    public int expireStalePaymentSessions() {
+        Instant cutoff = Instant.now().minus(30, ChronoUnit.MINUTES);
+        List<Order> stale = ordersRepository.findByStatusNameAndDateBefore(
+            ORDER_STATUS_PAYMENT_STARTED, cutoff);
+
+        int count = 0;
+        for (Order order : stale) {
+            try {
+                OrderPojo pojo = converterService.convertToPojo(order);
+                pojo.setToken(order.getTransactionToken());
+                markAsAborted(pojo);
+                count++;
+            } catch (Exception e) {
+                logger.error("Failed to expire stale order {}: {}", order.getId(), e.getMessage());
+            }
+        }
+        return count;
     }
 
     private Order fetchExistingOrThrowException(OrderPojo sell) throws BadInputException {

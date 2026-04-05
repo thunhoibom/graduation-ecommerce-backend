@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.OrderPojo;
+import org.monostudio.api.models.RefundResultPojo;
 import org.monostudio.payment.PaymentService;
 import org.monostudio.payment.PaymentServiceException;
 
@@ -78,6 +79,25 @@ public class WebpayplusPaymentServiceImpl
     @Override
     public String getPaymentResultPageUrl() {
         return properties.getBrowserRedirectionUrl();
+    }
+
+    @Override
+    public RefundResultPojo refund(String transactionToken, int amount) throws PaymentServiceException {
+        WebpayPlus.Transaction webpayTransaction = createWebpayTransaction();
+        try {
+            // Transbank amount is in the currency's base unit (dollars, not cents)
+            double refundAmount = amount / 100.0;
+            var response = webpayTransaction.refund(transactionToken, refundAmount);
+            return RefundResultPojo.builder()
+                .success(response.getResponseCode() == 0)
+                .responseCode(response.getResponseCode())
+                .type(response.getType())
+                .balance(response.getBalance() != null ? response.getBalance().longValue() : 0L)
+                .build();
+        } catch (Exception exc) {
+            logger.error("Refund failed for token {}: {}", transactionToken, exc.getMessage());
+            throw new PaymentServiceException("Refund failed: " + exc.getMessage(), exc);
+        }
     }
 
     private WebpayPlus.Transaction createWebpayTransaction() {

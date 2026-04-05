@@ -1,6 +1,5 @@
 package org.monostudio.jpa.services.patch.impl;
 
-import lombok.NoArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -13,7 +12,6 @@ import org.monostudio.jpa.services.patch.ProductVariantsPatchService;
 import java.util.Map;
 
 @Service
-@NoArgsConstructor
 public class ProductVariantsPatchServiceImpl
     implements ProductVariantsPatchService {
 

@@ -233,7 +233,7 @@ public class MailgunMailingServiceImpl
     }
 
     private MultipartBody preparePOST(String to, String subject, String templateName, String templateVariables) {
-        HttpRequestWithBody req = baseRequestWithBody
+        MultipartBody req = baseRequestWithBody
             .field("from", internalMailingIntegrationProperties.getSenderEmail())
             .field("to", to)
             .field("subject", subject)

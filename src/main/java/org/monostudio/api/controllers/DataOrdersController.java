@@ -23,9 +23,11 @@ import org.monostudio.api.services.PaginationService;
 import org.monostudio.api.services.OrdersProcessService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Order;
+import org.monostudio.jpa.repositories.OrdersRepository;
 import org.monostudio.jpa.services.SortSpecParserService;
 import org.monostudio.jpa.services.crud.OrdersCrudService;
 import org.monostudio.jpa.services.predicates.OrdersPredicateService;
+import org.monostudio.jpa.services.conversion.OrdersConverterService;
 import org.monostudio.jpa.sortspecs.OrdersSortSpec;
 
 import jakarta.persistence.EntityExistsException;
@@ -45,6 +47,8 @@ import static org.springframework.http.HttpStatus.NO_CONTENT;
 public class DataOrdersController
     extends DataCrudGenericController<OrderPojo, Order> {
     private final OrdersProcessService processService;
+    private final OrdersRepository ordersRepository;
+    private final OrdersConverterService ordersConverterService;
 
     @Autowired
     public DataOrdersController(
@@ -52,10 +56,14 @@ public class DataOrdersController
         SortSpecParserService sortService,
         OrdersCrudService crudService,
         OrdersPredicateService predicateService,
-        OrdersProcessService processService
+        OrdersProcessService processService,
+        OrdersRepository ordersRepository,
+        OrdersConverterService ordersConverterService
     ) {
         super(paginationService, sortService, crudService, predicateService);
         this.processService = processService;
+        this.ordersRepository = ordersRepository;
+        this.ordersConverterService = ordersConverterService;
     }
 
     @Override
@@ -147,6 +155,19 @@ public class DataOrdersController
     public void completeSell(@RequestBody OrderPojo sell)
         throws BadInputException, EntityNotFoundException {
         processService.markAsCompleted(sell);
+    }
+
+    @PostMapping("/cancellation")
+    @Operation(summary = "Admin cancel — releases stock and triggers refund if already paid.")
+    @PreAuthorize("hasAuthority('orders:update')")
+    public void cancelOrder(
+        @RequestParam Long orderId,
+        @RequestParam(required = false) String reason
+    ) throws EntityNotFoundException, BadInputException {
+        org.monostudio.jpa.entities.Order order = ordersRepository.getById(orderId);
+        OrderPojo pojo = ordersConverterService.convertToPojo(order);
+        pojo.setToken(order.getTransactionToken());
+        processService.markAsAdminCancelled(pojo, reason);
     }
 
     @Override

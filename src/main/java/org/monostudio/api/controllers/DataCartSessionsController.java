@@ -23,6 +23,7 @@ import org.monostudio.jpa.services.crud.CartSessionsCrudService;
 import org.monostudio.jpa.services.predicates.CartSessionsPredicateService;
 
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.EntityExistsException;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.NO_CONTENT;
@@ -87,5 +88,16 @@ public class DataCartSessionsController
     protected Map<String, OrderSpecifier<?>> getOrderSpecMap() {
         // No custom sort — return empty map
         return Map.of();
+    }
+
+    @Override
+    public void create(CartSessionPojo input) throws BadInputException, EntityExistsException {
+        throw new UnsupportedOperationException("Cart session creation is not supported via admin API");
+    }
+
+    @Override
+    public void update(CartSessionPojo input, Map<String, String> requestParams)
+        throws BadInputException, EntityNotFoundException {
+        throw new UnsupportedOperationException("Cart session full update is not supported via admin API");
     }
 }

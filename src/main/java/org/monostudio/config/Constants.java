@@ -17,6 +17,7 @@ public final class Constants {
     public static final String ORDER_STATUS_PAID_CONFIRMED = "Paid, Confirmed";
     public static final String ORDER_STATUS_REJECTED = "Rejected";
     public static final String ORDER_STATUS_COMPLETED = "Delivery Complete";
+    public static final String ORDER_STATUS_ADMIN_CANCELLED = "Admin Cancelled";
     public static final String BILLING_TYPE_INDIVIDUAL = "Bill";
     public static final String BILLING_TYPE_ENTERPRISE = "Enterprise Invoice";
     public static final String WEBPAY_SUCCESS_TOKEN_HEADER_NAME = "token_ws";

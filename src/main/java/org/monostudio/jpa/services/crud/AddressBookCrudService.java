@@ -31,7 +31,7 @@ public interface AddressBookCrudService
     /**
      * Partially update an entry by id.
      */
-    AddressBookPojo partialUpdate(Map<String, Object> changes, Long id, Long userId);
+    AddressBookPojo partialUpdate(Map<String, Object> changes, Long id, Long userId) throws BadInputException;
 
     /**
      * Replace an entry by id.

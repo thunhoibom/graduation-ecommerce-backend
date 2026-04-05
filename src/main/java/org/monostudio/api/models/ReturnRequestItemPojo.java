@@ -21,4 +21,9 @@ public class ReturnRequestItemPojo {
     private boolean isActive;
     private Long productId;
     private ProductPojo product;
+    /**
+     * The specific variant being returned.
+     * Preferred over productId when available — ensures stock is restored to the correct variant.
+     */
+    private Long variantId;
 }

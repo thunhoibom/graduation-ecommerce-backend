@@ -70,10 +70,9 @@ public class DiscountServiceImpl
         // is a soft guard only — the global useCount above is the authoritative limit.
         // TODO: Create DiscountUsage entity to track (discount_code, customer_id) usage
         //       and add a DiscountUsagesRepository.countByCodeAndCustomer(code, customerId) query.
-        if (discount.getMaxUsesPerCustomer() != null && customerId != null) {
-            // Placeholder: would query DiscountUsageRepository.countByDiscountCodeAndCustomerId(...)
-            // Until DiscountUsage exists, per-customer limits cannot be fully enforced.
-            // The global useCount provides a hard ceiling in the meantime.
+        // Until DiscountUsage exists, per-customer limits cannot be fully enforced.
+        // The global useCount provides a hard ceiling in the meantime.
+        if (discount.getMaxUsesPerCustomer() != null) {
             logger.debug("maxUsesPerCustomer={} set for code '{}', but per-customer "
                 + "usage tracking is not yet implemented — relying on global useCount",
                 discount.getMaxUsesPerCustomer(), discount.getCode());

@@ -8,6 +8,6 @@ import java.util.Optional;
 
 @Repository
 public interface ReturnRequestsRepository
-    extends JpaRepository<ReturnRequest, Long> {
+    extends org.monostudio.jpa.Repository<ReturnRequest> {
     Optional<ReturnRequest> findByOrderId(Long orderId);
 }

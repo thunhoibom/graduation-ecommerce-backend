@@ -118,7 +118,7 @@ public class AddressBookCrudServiceImpl
      * Update an existing address book entry (partial update).
      */
     @Transactional
-    public AddressBookPojo partialUpdate(Map<String, Object> changes, Long id, Long userId) {
+    public AddressBookPojo partialUpdate(Map<String, Object> changes, Long id, Long userId) throws BadInputException {
         AddressBook existing = addressBookRepository.findByIdAndUserId(id, userId)
             .orElseThrow(() -> new EntityNotFoundException("Address book entry not found"));
 
@@ -198,7 +198,7 @@ public class AddressBookCrudServiceImpl
     // Internal helpers
     // -------------------------------------------------------------------------
 
-    private Address buildAddressFromPojo(AddressPojo pojo) {
+    private Address buildAddressFromPojo(AddressPojo pojo) throws BadInputException {
         if (pojo == null) {
             throw new BadInputException("Address data is required");
         }
@@ -248,5 +248,13 @@ public class AddressBookCrudServiceImpl
         if (inputPojo.getLabel() == null || inputPojo.getLabel().isBlank()) {
             throw new BadInputException("Address label is required");
         }
+    }
+
+    /**
+     * Not supported — duplicate check is handled in createForUser after resolving userId.
+     */
+    @Override
+    public Optional<AddressBook> getExisting(AddressBookPojo input) throws BadInputException {
+        return Optional.empty();
     }
 }

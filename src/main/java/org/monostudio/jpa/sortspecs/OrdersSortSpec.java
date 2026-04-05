@@ -18,7 +18,7 @@ public class OrdersSortSpec {
         "date", BASE_PATH.date.asc(),
         "status", BASE_PATH.status.code.asc(),
         "customer", CUSTOMER_PATH.lastName.asc(),
-        "shipper", BASE_PATH.shipper.name.asc(),
+        "shipper", BASE_PATH.shippingMethod.name.asc(),
         "totalValue", BASE_PATH.totalValue.asc(),
         "netValue", BASE_PATH.netValue.asc(),
         "totalItems", BASE_PATH.totalItems.asc(),

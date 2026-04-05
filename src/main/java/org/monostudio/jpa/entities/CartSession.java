@@ -10,6 +10,7 @@ import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.monostudio.jpa.DBEntity;
+import org.monostudio.jpa.entities.Customer;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -19,11 +20,11 @@ import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
-import jakarta.persistence.Index;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -76,7 +77,10 @@ public class CartSession
      * Optional link to a registered Customer.
      * If set, the cart persists across devices for the same customer.
      */
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "session_customer_id")
+    private Customer customer;
+
     @OneToMany(mappedBy = "cartSession", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
     private Collection<CartItem> items = new ArrayList<>();
@@ -103,6 +107,7 @@ public class CartSession
     public CartSession(CartSession source) {
         this.id = source.id;
         this.token = source.token;
+        this.customer = null; // never copy the customer relationship
         this.createdAt = source.createdAt;
         this.updatedAt = source.updatedAt;
         this.expiresAt = source.expiresAt;

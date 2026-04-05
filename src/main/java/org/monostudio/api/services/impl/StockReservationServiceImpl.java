@@ -52,7 +52,7 @@ public class StockReservationServiceImpl
     /**
      * @deprecated Use {@link #getAvailableStock(String)} with SKU instead.
      */
-    @Override
+
     @Transactional(readOnly = true)
     public int getAvailableStock(Long variantId) {
         ProductVariant v = productVariantsRepository.getById(variantId);
@@ -62,7 +62,6 @@ public class StockReservationServiceImpl
     /**
      * @deprecated Use {@link #reserve(String, String, int)} with session ID instead.
      */
-    @Override
     @Transactional
     public void reserveStock(Long variantId, int quantity) {
         int updated = stockReservationsRepository.tryIncrementReserved(variantId, quantity);
@@ -77,7 +76,7 @@ public class StockReservationServiceImpl
     /**
      * @deprecated Use {@link #releaseItem(String, String)} with SKU instead.
      */
-    @Override
+
     @Transactional
     public void releaseStock(Long variantId, int quantity) {
         stockReservationsRepository.decrementReserved(variantId, quantity);
@@ -86,7 +85,6 @@ public class StockReservationServiceImpl
     /**
      * @deprecated Use {@link #confirmItem(String, String)} with SKU instead.
      */
-    @Override
     @Transactional
     public void commitReservation(Long variantId, int quantity) {
         stockReservationsRepository.confirmDeduct(variantId, quantity);
@@ -340,18 +338,22 @@ public class StockReservationServiceImpl
                 StockReservation.STATUS_RESERVED,
                 StockReservation.STATUS_CONFIRMED);
 
-            // Log stock adjustment
-            ProductVariant refreshedVariant = productVariantsRepository.getById(variantId);
-            stockAdjustmentService.recordForVariant(
-                refreshedVariant,
-                StockAdjustment.StockAdjustmentReason.PAYMENT_CONFIRMED,
-                -quantity,
-                "Payment confirmed, stock deducted",
-                sessionId,
-                null,
-                null,
-                null
-            );
+            // Log stock adjustment — reload variant from DB to capture post-deduct stockCurrent
+            // NOTE: confirmDeduct uses a native UPDATE query so JPA entity is stale.
+            // getById() with Open Session in View or entity refresh gives us the real value.
+            ProductVariant refreshedVariant = productVariantsRepository.findById(variantId).orElse(null);
+            if (refreshedVariant != null) {
+                stockAdjustmentService.recordForVariant(
+                    refreshedVariant,
+                    StockAdjustment.StockAdjustmentReason.PAYMENT_CONFIRMED,
+                    -quantity,
+                    "Payment confirmed, stock deducted",
+                    sessionId,
+                    null,
+                    null,
+                    null
+                );
+            }
 
             logger.info("Confirmed reservation {} (variant={}, qty={}, session={})",
                 reservation.getId(), variantId, quantity, sessionId);
@@ -381,28 +383,52 @@ public class StockReservationServiceImpl
 
         StockReservation reservation = existing.get();
         int rows = stockReservationsRepository.confirmDeduct(variant.getId(), reservation.getQuantity());
-        if (rows > 0) {
-            stockReservationsRepository.updateStatus(
-                reservation.getId(),
-                StockReservation.STATUS_RESERVED,
-                StockReservation.STATUS_CONFIRMED);
 
-            // Log stock adjustment
-            ProductVariant refreshedVariant = productVariantsRepository.getById(variant.getId());
-            stockAdjustmentService.recordForVariant(
-                refreshedVariant,
-                StockAdjustment.StockAdjustmentReason.PAYMENT_CONFIRMED,
-                -reservation.getQuantity(),
-                "Payment confirmed (item-level), stock deducted",
-                sessionId,
-                null,
-                null,
-                null
-            );
+        // If deduct failed (e.g. insufficient stock), fail hard — do NOT mark as confirmed.
+        // The caller (markAsPaid) will propagate this exception and rollback the transaction,
+        // preventing the customer from being charged for stock that isn't available.
+        if (rows == 0) {
+            throw new IllegalStateException(
+                "Stock deduction failed for variant '" + variantSku
+                    + "': available stock may be insufficient. "
+                    + "Order will not be marked as paid.");
         }
+
+        stockReservationsRepository.updateStatus(
+            reservation.getId(),
+            StockReservation.STATUS_RESERVED,
+            StockReservation.STATUS_CONFIRMED);
+
+        // Log stock adjustment
+        ProductVariant refreshedVariant = productVariantsRepository.getById(variant.getId());
+        stockAdjustmentService.recordForVariant(
+            refreshedVariant,
+            StockAdjustment.StockAdjustmentReason.PAYMENT_CONFIRMED,
+            -reservation.getQuantity(),
+            "Payment confirmed (item-level), stock deducted",
+            sessionId,
+            null,
+            null,
+            null
+        );
 
         reservation.setStatus(StockReservation.STATUS_CONFIRMED);
         return toPojo(reservation);
+    }
+
+    // ─── Confirm ────────────────────────────────────────────────────────────────
+
+    /**
+     * Atomically deducts stockCurrent and decrements stockReserved for the given variant.
+     * Called during payment success to permanently deduct reserved stock.
+     *
+     * @param variantId The variant ID to deduct from.
+     * @param quantity  The quantity to deduct.
+     * @return Number of rows updated (0 = no-op, e.g. insufficient stock).
+     */
+    @Transactional
+    public int confirmDeduct(Long variantId, int quantity) {
+        return stockReservationsRepository.confirmDeduct(variantId, quantity);
     }
 
     // ─── Query ─────────────────────────────────────────────────────────────────

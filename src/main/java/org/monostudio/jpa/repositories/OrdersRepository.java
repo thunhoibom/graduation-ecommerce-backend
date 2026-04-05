@@ -8,6 +8,7 @@ import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.entities.OrderStatus;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -169,4 +170,16 @@ public interface OrdersRepository
     boolean hasCompletedOrderWithProduct(
         @Param("customerId") Long customerId,
         @Param("productId") Long productId);
+
+    /**
+     * Finds all orders in a given status older than the cutoff timestamp.
+     * Used by the stale-payment-session expiry job to find and cancel abandoned checkouts.
+     *
+     * @param statusName The exact name of the status to match.
+     * @param cutoff     Orders created before this time will be returned.
+     */
+    @Query("SELECT o FROM Order o WHERE o.status.name = :statusName AND o.date < :cutoff")
+    List<Order> findByStatusNameAndDateBefore(
+        @Param("statusName") String statusName,
+        @Param("cutoff") Instant cutoff);
 }

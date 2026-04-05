@@ -2,6 +2,7 @@ package org.monostudio.api.controllers;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.monostudio.common.exceptions.BadInputException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -72,7 +73,7 @@ public class PublicAddressBookController {
     @PostMapping
     @Operation(summary = "Save a new address to the address book")
     @ResponseStatus(HttpStatus.CREATED)
-    public AddressBookPojo create(@Valid @RequestBody AddressBookPojo input, Principal principal) {
+    public AddressBookPojo create(@Valid @RequestBody AddressBookPojo input, Principal principal) throws BadInputException {
         Long userId = resolveUserId(principal);
         return addressBookCrudService.createForUser(input, userId);
     }
@@ -86,7 +87,7 @@ public class PublicAddressBookController {
         @PathVariable Long id,
         @Valid @RequestBody AddressBookPojo input,
         Principal principal
-    ) {
+    ) throws BadInputException {
         Long userId = resolveUserId(principal);
         return addressBookCrudService.replace(input, id, userId);
     }
@@ -100,7 +101,7 @@ public class PublicAddressBookController {
         @PathVariable Long id,
         @RequestBody Map<String, Object> changes,
         Principal principal
-    ) {
+    ) throws BadInputException {
         Long userId = resolveUserId(principal);
         return addressBookCrudService.partialUpdate(changes, id, userId);
     }

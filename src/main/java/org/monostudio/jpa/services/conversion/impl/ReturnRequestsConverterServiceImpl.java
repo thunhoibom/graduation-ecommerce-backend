@@ -95,7 +95,13 @@ public class ReturnRequestsConverterServiceImpl
             return new ArrayList<>();
         }
         return items.stream()
-            .map(itemsConverterService::convertToNewEntity)
+            .map(item -> {
+                try {
+                    return itemsConverterService.convertToNewEntity(item);
+                } catch (BadInputException e) {
+                    throw new RuntimeException(e);
+                }
+            })
             .collect(Collectors.toList());
     }
 }

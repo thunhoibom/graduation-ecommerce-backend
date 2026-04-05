@@ -72,7 +72,6 @@ public class DataProductReviewsController
         return super.readMany(allRequestParams);
     }
 
-    @Override
     @PostMapping
     @Operation(summary = "Create a product review on behalf of a customer (admin — bypasses approval)")
     @ResponseStatus(HttpStatus.CREATED)
@@ -81,7 +80,7 @@ public class DataProductReviewsController
         @Valid @RequestBody ProductReviewPojo input,
         @RequestParam Long customerId
     ) throws BadInputException, EntityExistsException {
-        crudService.createReview(input, customerId);
+        productReviewsCrudService.createReview(input, customerId);
     }
 
     /**
@@ -121,5 +120,15 @@ public class DataProductReviewsController
     @Override
     protected Map<String, com.querydsl.core.types.OrderSpecifier<?>> getOrderSpecMap() {
         return ProductReviewsSortSpec.ORDER_SPEC_MAP;
+    }
+
+    /**
+     * Standard create — delegates to the admin-aware overload.
+     * customerId must be passed via ?customerId= query param.
+     */
+    @Override
+    public void create(ProductReviewPojo input) throws BadInputException, EntityExistsException {
+        throw new UnsupportedOperationException(
+            "Use POST with ?customerId= parameter instead");
     }
 }

@@ -125,7 +125,7 @@ public class CheckoutServiceImpl
         }
 
         // ── 2. Validate & reserve stock, compute order details ─────────────────
-        List<OrderDetailPojo> orderDetails = resolveCartItems(cartItems);
+        List<OrderDetailPojo> orderDetails = resolveCartItems(cartItems, cart.getToken());
 
         // ── 3. Compute subtotals ─────────────────────────────────────────────────
         int netValue = 0;
@@ -151,7 +151,7 @@ public class CheckoutServiceImpl
         // Base free-threshold check first
         int shippingFee = computeShippingFee(shippingMethod, subtotal);
 
-        // ── 6. Validate and redeem discount ─────────────────────────────────────
+        // ── 6. Validate discount (do NOT redeem here — redemption happens at markAsPaid) ──
         DiscountValidationResult discountResult = discountService.validateDiscount(
             request.getDiscountCode(), subtotal
         );
@@ -167,16 +167,11 @@ public class CheckoutServiceImpl
 
         int discountAmount = discountResult.getDiscountAmount();
 
-        // Redeem discount (increment use count) — only after all validations pass
-        Long customerId = null; // TODO: resolve from authenticated user / request
-        discountService.redeemDiscount(request.getDiscountCode(), subtotal, customerId);
-
         // ── 7. Build OrderPojo ───────────────────────────────────────────────────
         OrderPojo orderPojo = OrderPojo.builder()
             .transportValue(shippingFee)
             .netValue(netValue)
             .taxValue(taxesValue)
-            .totalValue(Math.max(0, subtotal + shippingFee - discountAmount))
             .totalItems(totalItems)
             .paymentType(request.getPaymentType())
             .billingType(request.getBillingType())
@@ -210,9 +205,15 @@ public class CheckoutServiceImpl
     /**
      * Converts CartItems into OrderDetailPojos, reserving stock via StockReservationService.
      */
-    private List<OrderDetailPojo> resolveCartItems(List<CartItem> cartItems) throws BadInputException {
+    private List<OrderDetailPojo> resolveCartItems(List<CartItem> cartItems, String sessionToken) throws BadInputException {
         List<OrderDetailPojo> details = cartItems.stream()
-            .map(this::resolveCartItem)
+            .map(item -> {
+                try {
+                    return resolveCartItem(item, sessionToken);
+                } catch (BadInputException e) {
+                    throw new RuntimeException(e);
+                }
+            })
             .collect(Collectors.toList());
 
         // Validate all items before any reservation is committed (fail-fast)
@@ -221,12 +222,12 @@ public class CheckoutServiceImpl
         return details;
     }
 
-    private OrderDetailPojo resolveCartItem(CartItem item) throws BadInputException {
+    private OrderDetailPojo resolveCartItem(CartItem item, String sessionToken) throws BadInputException {
         ProductVariant variant = item.getVariant();
         int units = item.getQuantity();
 
         // Reserve stock for the duration of checkout
-        stockReservationService.reserveStock(variant.getId(), units);
+        stockReservationService.reserve(sessionToken, variant.getSku(), units);
 
         Product product = variant.getProduct();
         int unitValue = product.getPrice() + variant.getPriceModifier();

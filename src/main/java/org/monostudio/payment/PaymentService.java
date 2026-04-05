@@ -2,6 +2,7 @@ package org.monostudio.payment;
 
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.OrderPojo;
+import org.monostudio.api.models.RefundResultPojo;
 
 /**
  * Interface for requesting and validating payments through an external payment
@@ -31,4 +32,14 @@ public interface PaymentService {
      * @return Said URL.
      */
     String getPaymentResultPageUrl();
+
+    /**
+     * Refund a committed transaction through the payment gateway.
+     *
+     * @param transactionToken The token from the original (committed) transaction.
+     * @param amount           Amount to refund in the same unit as totalValue (cents).
+     * @return RefundResultPojo with success flag, gateway response code, type, and balance.
+     * @throws PaymentServiceException On gateway error or communication failure.
+     */
+    RefundResultPojo refund(String transactionToken, int amount) throws PaymentServiceException;
 }

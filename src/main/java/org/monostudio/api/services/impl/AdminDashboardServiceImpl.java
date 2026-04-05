@@ -11,6 +11,7 @@ import org.monostudio.jpa.repositories.*;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -139,8 +140,8 @@ public class AdminDashboardServiceImpl
             return startOfDay ? Instant.MIN : Instant.now();
         }
         return startOfDay
-            ? date.atStartOfDay(LocalTime.UTC).toInstant(java.time.ZoneOffset.UTC)
-            : date.atTime(LocalTime.MAX).toInstant(java.time.ZoneOffset.UTC);
+            ? date.atStartOfDay(ZoneOffset.UTC).toInstant()
+            : date.atTime(LocalTime.MAX).atZone(ZoneOffset.UTC).toInstant();
     }
 
     private String normalizeGroupBy(String groupBy) {

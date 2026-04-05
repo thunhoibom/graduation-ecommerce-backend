@@ -57,6 +57,13 @@ public class SecurityConfig {
             .headers(configure -> configure.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin))
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(configure -> configure.sessionCreationPolicy(STATELESS))
+            .authorizeHttpRequests(configure -> configure
+                .requestMatchers("/public/cart/**").permitAll()
+                .requestMatchers("/public/discount/**").permitAll()
+                .requestMatchers("/public/shipping/**").permitAll()
+                .requestMatchers("/public/checkout/**").permitAll()
+                .requestMatchers("/public/products/**").permitAll()
+                .anyRequest().authenticated())
             .addFilter(this.loginFilterForUrl("/public/login"))
             .addFilterAfter(this.guestFilterForUrl("/public/guest"),
                             JwtLoginAuthenticationFilter.class)

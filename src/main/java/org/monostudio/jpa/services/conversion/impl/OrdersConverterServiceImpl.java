@@ -341,16 +341,18 @@ public class OrdersConverterServiceImpl
         int totalUnits = 0;
         for (OrderDetail sd : entity.getDetails()) {
             int unitValue = sd.getUnitValue();
-            double unitTaxValue = unitValue * TAX_PERCENT;
-            double unitNetValue = unitValue - unitTaxValue;
-            taxesValue += (int) (unitTaxValue * sd.getUnits());
-            netValue += (int) (unitNetValue * sd.getUnits());
+            // Extract tax from the inclusive price: unitNet = unitValue / 1.19
+            double unitNetValue = unitValue / (1 + TAX_PERCENT);
+            int unitTaxValue = unitValue - (int) unitNetValue;
+            netValue += (int) unitNetValue * sd.getUnits();
+            taxesValue += unitTaxValue * sd.getUnits();
             totalUnits += sd.getUnits();
         }
-        entity.setTaxesValue(taxesValue);
         entity.setNetValue(netValue);
+        entity.setTaxesValue(taxesValue);
+        int subtotal = netValue + taxesValue;
         int discountValue = entity.getDiscountValue();
-        entity.setTotalValue(Math.max(0, taxesValue + netValue + entity.getTransportValue() - discountValue));
+        entity.setTotalValue(Math.max(0, subtotal + entity.getTransportValue() - discountValue));
         entity.setTotalItems(totalUnits);
     }
 

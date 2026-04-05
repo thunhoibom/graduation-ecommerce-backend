@@ -10,7 +10,7 @@ import java.util.Optional;
 
 @org.springframework.stereotype.Repository
 public interface ProductReviewsRepository
-    extends JpaRepository<ProductReview, Long> {
+    extends org.monostudio.jpa.Repository<ProductReview> {
 
     List<ProductReview> findByProductId(Long productId);
 

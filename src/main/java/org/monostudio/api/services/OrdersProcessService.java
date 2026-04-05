@@ -73,4 +73,24 @@ public interface OrdersProcessService {
      * @throws EntityNotFoundException When the transaction is not found in the persistence context
      */
     OrderPojo markAsCompleted(OrderPojo sell) throws BadInputException, EntityNotFoundException;
+
+    /**
+     * Admin forcefully cancels an order (e.g. fraud, customer request after payment).
+     * Releases stock reservations and triggers a refund if payment has been made.
+     *
+     * @param sell   The sell to cancel.
+     * @param reason Reason for the cancellation (logged but not persisted on the order entity).
+     * @throws BadInputException       When the order is not in a cancelable state.
+     * @throws EntityNotFoundException When the order is not found.
+     */
+    OrderPojo markAsAdminCancelled(OrderPojo sell, String reason)
+        throws BadInputException, EntityNotFoundException;
+
+    /**
+     * Cancels all orders stuck in "Payment Started" status for longer than 30 minutes.
+     * Releases their stock reservations. Called by the scheduled job.
+     *
+     * @return The number of orders that were expired.
+     */
+    int expireStalePaymentSessions();
 }

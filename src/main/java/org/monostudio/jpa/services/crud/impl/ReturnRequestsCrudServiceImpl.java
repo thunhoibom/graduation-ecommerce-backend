@@ -88,9 +88,14 @@ public class ReturnRequestsCrudServiceImpl
                 ReturnRequestItem itemEntity = new ReturnRequestItem();
                 itemEntity.setQuantity(itemPojo.getQuantity());
                 itemEntity.setReason(itemPojo.getReason());
-                itemEntity.setIsActive(true);
+                itemEntity.setActive(true);
                 itemEntity.setReturnRequest(entity);
-                if (itemPojo.getProductId() != null) {
+                if (itemPojo.getVariantId() != null) {
+                    org.monostudio.jpa.entities.ProductVariant variant =
+                        new org.monostudio.jpa.entities.ProductVariant();
+                    variant.setId(itemPojo.getVariantId());
+                    itemEntity.setVariant(variant);
+                } else if (itemPojo.getProductId() != null) {
                     org.monostudio.jpa.entities.Product product =
                         new org.monostudio.jpa.entities.Product();
                     product.setId(itemPojo.getProductId());
@@ -98,7 +103,9 @@ public class ReturnRequestsCrudServiceImpl
                 }
                 itemEntities.add(itemEntity);
             }
-            List<ReturnRequestItem> savedItems = itemsRepository.saveAll(itemEntities);
+            itemsRepository.saveAll(itemEntities);
+            // Reload items via repository to ensure they are in the persistence context
+            List<ReturnRequestItem> savedItems = itemsRepository.findByReturnRequestId(entity.getId());
             List<ReturnRequestItemPojo> savedItemPojos = savedItems.stream()
                 .map(converterService::convertItemToPojo)
                 .collect(Collectors.toList());

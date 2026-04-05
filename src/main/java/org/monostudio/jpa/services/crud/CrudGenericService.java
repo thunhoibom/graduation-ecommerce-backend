@@ -37,8 +37,8 @@ public abstract class CrudGenericService<M, E extends DBEntity>
     protected static final String ITEM_NOT_FOUND = "Requested item(s) not found";
     protected static final String ITEM_ALREADY_EXISTS = "The item already exists";
     private final Repository<E> repository;
-    private final ConverterService<M, E> converter;
-    private final PatchService<M, E> patchService;
+    protected final ConverterService<M, E> converter;
+    protected final PatchService<M, E> patchService;
 
     protected CrudGenericService(
         Repository<E> repository,

@@ -17,6 +17,7 @@ import org.monostudio.jpa.repositories.CartItemsRepository;
 import org.monostudio.jpa.repositories.CartSessionsRepository;
 import org.monostudio.jpa.repositories.ProductVariantsRepository;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -62,7 +63,7 @@ public class CartServiceImpl
     public CartSessionPojo getCart(String sessionToken) {
         return cartSessionsRepository.findByTokenDeep(sessionToken)
             .map(this::toSessionPojo)
-            .orElseGet(() -> createNewSession(sessionToken));
+            .orElseGet(() -> toSessionPojo(createNewSession(sessionToken)));
     }
 
     private CartSession createNewSession(String token) {
@@ -164,7 +165,7 @@ public class CartServiceImpl
         throws BadInputException {
         CartSession session = cartSessionsRepository.findByToken(sessionToken).orElse(null);
         if (session == null) {
-            return createNewSession(sessionToken);
+            return toSessionPojo(createNewSession(sessionToken));
         }
 
         ProductVariant variant = productVariantsRepository.findBySku(variantSku).orElse(null);
