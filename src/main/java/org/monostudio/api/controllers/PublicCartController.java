@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/public/cart")
+@RequestMapping("/api/public/cart")
 @Tag(name = "Cart")
 public class PublicCartController {
 
@@ -40,7 +40,7 @@ public class PublicCartController {
     @GetMapping
     @Operation(summary = "Get current cart state (creates session if none)")
     public CartSessionPojo getCart(
-        @RequestHeader("X-Session-Token") String sessionToken
+        @RequestHeader(name = "X-Session-Token", required = false) String sessionToken
     ) {
         return cartService.getCart(sessionToken);
     }
@@ -53,7 +53,7 @@ public class PublicCartController {
     @PostMapping("/items")
     @Operation(summary = "Add an item to the cart")
     public CartSessionPojo addItem(
-        @RequestHeader("X-Session-Token") String sessionToken,
+        @RequestHeader(name = "X-Session-Token", required = false) String sessionToken,
         @RequestBody Map<String, Object> body
     ) throws BadInputException {
         String variantSku = (String) body.get("variantSku");
@@ -75,7 +75,7 @@ public class PublicCartController {
     @PatchMapping("/items/{variantSku}")
     @Operation(summary = "Update item quantity in the cart")
     public CartSessionPojo updateItem(
-        @RequestHeader("X-Session-Token") String sessionToken,
+        @RequestHeader(name = "X-Session-Token", required = false) String sessionToken,
         @PathVariable String variantSku,
         @RequestBody Map<String, Integer> body
     ) throws BadInputException {
@@ -93,7 +93,7 @@ public class PublicCartController {
     @DeleteMapping("/items/{variantSku}")
     @Operation(summary = "Remove a specific item from the cart")
     public CartSessionPojo removeItem(
-        @RequestHeader("X-Session-Token") String sessionToken,
+        @RequestHeader(name = "X-Session-Token", required = false) String sessionToken,
         @PathVariable String variantSku
     ) throws BadInputException {
         return cartService.removeItem(sessionToken, variantSku);
@@ -106,7 +106,7 @@ public class PublicCartController {
     @DeleteMapping
     @Operation(summary = "Clear the entire cart")
     public ResponseEntity<Void> clearCart(
-        @RequestHeader("X-Session-Token") String sessionToken
+        @RequestHeader(name = "X-Session-Token", required = false) String sessionToken
     ) {
         cartService.clearCart(sessionToken);
         return ResponseEntity.noContent().build();
@@ -119,7 +119,7 @@ public class PublicCartController {
     @GetMapping("/validate")
     @Operation(summary = "Validate cart stock availability before checkout")
     public ResponseEntity<Map<String, Object>> validateCart(
-        @RequestHeader("X-Session-Token") String sessionToken
+        @RequestHeader(name = "X-Session-Token", required = false) String sessionToken
     ) {
         List<CartItemPojo> unavailable = cartService.validateCartStock(sessionToken);
         if (unavailable.isEmpty()) {

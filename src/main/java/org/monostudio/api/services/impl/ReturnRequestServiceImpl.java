@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.RefundResultPojo;
 import org.monostudio.api.models.ReturnRequestItemPojo;
 import org.monostudio.api.models.ReturnRequestPojo;
+import org.monostudio.api.services.RefundRetryService;
 import org.monostudio.api.services.ReturnRequestService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.ProductVariant;
@@ -15,6 +16,7 @@ import org.monostudio.jpa.entities.ReturnRequest;
 import org.monostudio.jpa.entities.ReturnRequestItem;
 import org.monostudio.jpa.entities.StockAdjustment;
 import org.monostudio.jpa.repositories.ProductVariantsRepository;
+import org.monostudio.jpa.repositories.OrderDetailsRepository;
 import org.monostudio.jpa.repositories.ReturnRequestItemsRepository;
 import org.monostudio.jpa.repositories.ReturnRequestsRepository;
 import org.monostudio.jpa.services.conversion.ReturnRequestsConverterService;
@@ -26,6 +28,7 @@ import org.monostudio.payment.PaymentService;
 import org.monostudio.payment.PaymentServiceException;
 
 import jakarta.persistence.EntityNotFoundException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -39,31 +42,37 @@ public class ReturnRequestServiceImpl
     private final ReturnRequestsRepository returnRequestsRepository;
     private final ReturnRequestItemsRepository itemsRepository;
     private final ProductVariantsRepository productVariantsRepository;
+    private final OrderDetailsRepository orderDetailsRepository;
     private final ReturnRequestsCrudService crudService;
     private final ReturnRequestsConverterService converterService;
     private final StockAdjustmentService stockAdjustmentService;
     private final MailingService mailingService;
     private final PaymentService paymentIntegrationService;
+    private final RefundRetryService refundRetryService;
 
     @Autowired
     public ReturnRequestServiceImpl(
         ReturnRequestsRepository returnRequestsRepository,
         ReturnRequestItemsRepository itemsRepository,
         ProductVariantsRepository productVariantsRepository,
+        OrderDetailsRepository orderDetailsRepository,
         ReturnRequestsCrudService crudService,
         ReturnRequestsConverterService converterService,
         StockAdjustmentService stockAdjustmentService,
-        MailingService mailingService,
-        PaymentService paymentIntegrationService
+        @Autowired(required = false) MailingService mailingService,
+        PaymentService paymentIntegrationService,
+        @Autowired(required = false) RefundRetryService refundRetryService
     ) {
         this.returnRequestsRepository = returnRequestsRepository;
         this.itemsRepository = itemsRepository;
         this.productVariantsRepository = productVariantsRepository;
+        this.orderDetailsRepository = orderDetailsRepository;
         this.crudService = crudService;
         this.converterService = converterService;
         this.stockAdjustmentService = stockAdjustmentService;
         this.mailingService = mailingService;
         this.paymentIntegrationService = paymentIntegrationService;
+        this.refundRetryService = refundRetryService;
     }
 
     @Override
@@ -71,6 +80,13 @@ public class ReturnRequestServiceImpl
         if (input.getStatus() == null) {
             input.setStatus(ReturnRequest.ReturnRequestStatus.PENDING.name());
         }
+
+        // Validate return quantities against the original order before accepting the request.
+        // A customer cannot return more than they ordered.
+        if (input.getItems() != null && input.getOrderId() != null) {
+            validateReturnQuantities(input.getOrderId(), input.getItems());
+        }
+
         ReturnRequestPojo result = crudService.create(input);
         // Notify store owners of the new return request
         try {
@@ -185,26 +201,66 @@ public class ReturnRequestServiceImpl
             throw new BadInputException(INVALID_STATE);
         }
 
-        // Call the payment gateway refund API if the original transaction token is available.
-        Integer refundAmount = existing.getRefundAmount();
-        String token = existing.getOrder() != null ? existing.getOrder().getTransactionToken() : null;
-        if (token != null && refundAmount != null && refundAmount > 0) {
+        // ── Refund amount validation ─────────────────────────────────────────────
+        // Validate refund amount BEFORE calling the gateway.
+        Integer requestedRefundAmount = existing.getRefundAmount();
+        org.monostudio.jpa.entities.Order order = existing.getOrder();
+        if (order == null) {
+            throw new BadInputException("Cannot complete refund — return request has no associated order");
+        }
+        if (requestedRefundAmount == null || requestedRefundAmount <= 0) {
+            throw new BadInputException("Refund amount must be greater than zero");
+        }
+
+        int orderTotal = order.getTotalValue();
+        int alreadyRefunded = order.getTotalRefundedAmount();
+        int remainingRefundable = Math.max(0, orderTotal - alreadyRefunded);
+
+        // Cap refund to what is remaining on the order
+        int actualRefundAmount = Math.min(requestedRefundAmount, remainingRefundable);
+        if (actualRefundAmount == 0) {
+            throw new BadInputException(
+                "No remaining amount to refund on this order. Already refunded: " + alreadyRefunded);
+        }
+        if (requestedRefundAmount > remainingRefundable) {
+            logger.warn("Return {}: requested refund {} exceeds remaining {}. Capping to {}.",
+                id, requestedRefundAmount, remainingRefundable, actualRefundAmount);
+        }
+
+        // ── Call payment gateway ─────────────────────────────────────────────────
+        // P0.2: On gateway failure, enqueue to retry queue instead of swallowing silently.
+        String token = order.getTransactionToken();
+        boolean refundSucceeded = false;
+        if (token != null && paymentIntegrationService != null) {
             try {
-                RefundResultPojo result = paymentIntegrationService.refund(token, refundAmount);
+                RefundResultPojo result = paymentIntegrationService.refund(token, actualRefundAmount);
                 if (result.isSuccess()) {
-                    logger.info("Refund succeeded for return {}: type={}, code={}",
-                        id, result.getType(), result.getResponseCode());
+                    logger.info("Refund succeeded for return {}: type={}, code={}, amount={}",
+                        id, result.getType(), result.getResponseCode(), actualRefundAmount);
+                    refundSucceeded = true;
                 } else {
-                    logger.warn("Refund rejected by gateway for return {}: code={}",
+                    logger.warn("Refund rejected by gateway for return {}: code={} — enqueuing for retry",
                         id, result.getResponseCode());
+                    enqueueRefundRetry(order, "RETURN_COMPLETED", actualRefundAmount);
                 }
             } catch (PaymentServiceException e) {
-                // Log but do not block — admin must handle manually if refund gateway fails.
-                logger.error("Refund gateway error for return {}: {}", id, e.getMessage());
+                // Gateway error — enqueue for automatic retry
+                logger.error("Refund gateway error for return {}: {} — enqueuing for retry",
+                    id, e.getMessage());
+                enqueueRefundRetry(order, "RETURN_COMPLETED", actualRefundAmount);
             }
         }
 
-        existing.setStatus(ReturnRequest.ReturnRequestStatus.REFUND_COMPLETED);
+        // ── Update order totals (regardless of gateway outcome) ─────────────────
+        // Even if gateway is slow/retrying, update the accounting so we don't double-refund.
+        order.setTotalRefundedAmount(alreadyRefunded + actualRefundAmount);
+
+        // Status: only mark REFUND_COMPLETED if gateway succeeded immediately.
+        // If enqueued for retry, leave at REFUND_PROCESSING so admins can track it.
+        existing.setStatus(
+            refundSucceeded
+                ? ReturnRequest.ReturnRequestStatus.REFUND_COMPLETED
+                : ReturnRequest.ReturnRequestStatus.REFUND_PROCESSING);
         if (adminNotes != null) {
             existing.setAdminNotes(adminNotes);
         }
@@ -293,6 +349,56 @@ public class ReturnRequestServiceImpl
         }
     }
 
+    /**
+     * Validates that no return item quantity exceeds what was originally ordered.
+     * Prevents customers from claiming more units than they actually purchased.
+     *
+     * @param orderId         Original order ID
+     * @param returnItems      Items being returned
+     * @throws BadInputException if any item quantity exceeds the order quantity
+     */
+    private void validateReturnQuantities(Long orderId, Collection<ReturnRequestItemPojo> returnItems)
+        throws BadInputException {
+        if (returnItems == null || returnItems.isEmpty()) {
+            return;
+        }
+
+        // Build a map of ordered quantities by variantId (or productId as fallback)
+        Map<Long, Integer> orderedQuantityByVariant = orderDetailsRepository.findBySellId(orderId)
+            .stream()
+            .collect(Collectors.toMap(
+                d -> d.getProductVariant() != null ? d.getProductVariant().getId() : 0L,
+                d -> d.getUnits(),
+                (a, b) -> a // in case of duplicate key, keep first
+            ));
+
+        for (ReturnRequestItemPojo returnItem : returnItems) {
+            Long variantId = returnItem.getVariantId();
+            int requestedQty = returnItem.getQuantity();
+
+            if (requestedQty <= 0) {
+                throw new BadInputException(
+                    "Return quantity must be greater than zero"
+                        + (variantId != null ? " for variant " + variantId : ""));
+            }
+
+            if (variantId != null && variantId != 0L) {
+                Integer orderedQty = orderedQuantityByVariant.get(variantId);
+                if (orderedQty == null) {
+                    throw new BadInputException(
+                        "Cannot return variant " + variantId
+                            + " — it was not part of order " + orderId);
+                }
+                if (requestedQty > orderedQty) {
+                    throw new BadInputException(
+                        "Cannot return " + requestedQty + " units of variant " + variantId
+                            + ": only " + orderedQty + " were ordered");
+                }
+            }
+            // If no variantId, we cannot do precise validation — allow it (admin review will catch it)
+        }
+    }
+
     private ReturnRequestPojo buildReturnRequestPojo(ReturnRequest entity, List<ReturnRequestItem> items) {
         ReturnRequestPojo target = converterService.convertToPojo(entity);
         List<ReturnRequestItemPojo> itemPojos = items.stream()
@@ -300,5 +406,27 @@ public class ReturnRequestServiceImpl
             .collect(Collectors.toList());
         target.setItems(itemPojos);
         return target;
+    }
+
+    /**
+     * Enqueues a failed refund for automatic retry via the RefundRetryQueue.
+     * P0.2: Replaces the previous "swallow exception and log" behavior.
+     */
+    private void enqueueRefundRetry(org.monostudio.jpa.entities.Order order, String reason, int amount) {
+        if (refundRetryService == null) {
+            // RefundRetryService not available — this is a critical gap.
+            logger.error("⚠️  CRITICAL: RefundRetryService not available. "
+                    + "Refund FAILED and NOT enqueued for retry. OrderId={}, Amount={}, Reason={}. "
+                    + "Manual intervention required.",
+                order.getId(), amount, reason);
+            return;
+        }
+        try {
+            refundRetryService.enqueueFailedRefund(order.getId(), order.getTransactionToken(), amount, reason);
+        } catch (Exception e) {
+            logger.error("⚠️  CRITICAL: Failed to enqueue refund retry. "
+                    + "OrderId={}, Amount={}, Reason={}, Error={}. Manual intervention required.",
+                order.getId(), amount, reason, e.getMessage());
+        }
     }
 }

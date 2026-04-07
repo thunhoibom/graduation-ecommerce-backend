@@ -6,11 +6,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.monostudio.api.models.CartItemPojo;
 import org.monostudio.api.models.CheckoutStartRequest;
 import org.monostudio.api.models.DiscountValidationResult;
 import org.monostudio.api.models.OrderDetailPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
+import org.monostudio.api.models.PaymentResultPojo;
 import org.monostudio.api.services.CheckoutService;
 import org.monostudio.api.services.DiscountService;
 import org.monostudio.api.services.OrdersProcessService;
@@ -33,8 +35,12 @@ import org.monostudio.jpa.services.crud.OrdersCrudService;
 import org.monostudio.jpa.services.predicates.OrdersPredicateService;
 import org.monostudio.payment.PaymentService;
 import org.monostudio.payment.PaymentServiceException;
+import org.monostudio.jpa.entities.PaymentCallbackLog;
+import org.monostudio.jpa.entities.PaymentCallbackLog.CallbackResult;
+import org.monostudio.jpa.repositories.PaymentCallbackLogRepository;
 
 import jakarta.persistence.EntityNotFoundException;
+import java.lang.Math;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -64,6 +70,7 @@ public class CheckoutServiceImpl
     private final PaymentService paymentIntegrationService;
     private final StockReservationService stockReservationService;
     private final DiscountService discountService;
+    private final PaymentCallbackLogRepository paymentCallbackLogRepository;
 
     static final double TAX_PERCENT = 0.19;
 
@@ -81,7 +88,8 @@ public class CheckoutServiceImpl
         OrderDetailsRepository orderDetailsRepository,
         PaymentService paymentIntegrationService,
         StockReservationService stockReservationService,
-        DiscountService discountService
+        DiscountService discountService,
+        PaymentCallbackLogRepository paymentCallbackLogRepository
     ) {
         this.ordersCrudService = ordersCrudService;
         this.ordersProcessService = ordersProcessService;
@@ -96,6 +104,7 @@ public class CheckoutServiceImpl
         this.paymentIntegrationService = paymentIntegrationService;
         this.stockReservationService = stockReservationService;
         this.discountService = discountService;
+        this.paymentCallbackLogRepository = paymentCallbackLogRepository;
     }
 
     /**
@@ -122,6 +131,20 @@ public class CheckoutServiceImpl
         List<CartItem> cartItems = cart.getItems().stream().toList();
         if (cartItems.isEmpty()) {
             throw new BadInputException("Cart is empty — nothing to checkout");
+        }
+
+        // ── 1b. Re-validate stock availability ───────────────────────────────────
+        // Stock was reserved at add-to-cart time. Validate it is still available
+        // and hasn't expired or been stolen by another checkout session.
+        // NOTE: prepareForCheckout also releases any expired reservations first.
+        stockReservationService.expireStaleReservations();
+        List<CartItemPojo> unavailable = validateCartStockForCheckout(cartItems);
+        if (!unavailable.isEmpty()) {
+            String unavailableSkus = unavailable.stream()
+                .map(CartItemPojo::getVariantSkuResolved)
+                .collect(Collectors.joining(", "));
+            throw new BadInputException(
+                "Some items are no longer available: " + unavailableSkus);
         }
 
         // ── 2. Validate & reserve stock, compute order details ─────────────────
@@ -152,8 +175,10 @@ public class CheckoutServiceImpl
         int shippingFee = computeShippingFee(shippingMethod, subtotal);
 
         // ── 6. Validate discount (do NOT redeem here — redemption happens at markAsPaid) ──
+        // Note: customerId is null here — per-customer limit check runs at markAsPaid
+        // when the actual customer is resolved from the order.
         DiscountValidationResult discountResult = discountService.validateDiscount(
-            request.getDiscountCode(), subtotal
+            request.getDiscountCode(), subtotal, null
         );
         if (!discountResult.isValid()) {
             throw new BadInputException("Discount error: " + discountResult.getMessage());
@@ -226,8 +251,15 @@ public class CheckoutServiceImpl
         ProductVariant variant = item.getVariant();
         int units = item.getQuantity();
 
-        // Reserve stock for the duration of checkout
-        stockReservationService.reserve(sessionToken, variant.getSku(), units);
+        // NOTE: Stock is already reserved at add-to-cart time (CartServiceImpl.addItem).
+        // Checkout must NOT re-reserve — doing so would double-count stockReserved.
+        // This method only validates variant is still active and has sufficient available stock.
+        Integer available = stockReservationService.getAvailableStock(variant.getSku());
+        if (available == null || available < units) {
+            throw new BadInputException(
+                "Insufficient stock for variant '" + variant.getSku()
+                    + "': requested " + units + ", available " + Math.max(0, available != null ? available : 0));
+        }
 
         Product product = variant.getProduct();
         int unitValue = product.getPrice() + variant.getPriceModifier();
@@ -270,13 +302,28 @@ public class CheckoutServiceImpl
     @Override
     public OrderPojo confirmTransaction(String transactionToken, boolean wasAborted)
         throws EntityNotFoundException, PaymentServiceException {
+        // P0.4: Idempotency — if this token has already been processed, skip reprocessing.
+        // This prevents double-confirm (double stock deduction) and double-abort.
+        // The token is the gateway's unique identifier for this payment attempt.
+        if (paymentCallbackLogRepository.existsByToken(transactionToken)) {
+            OrderPojo existing = this.getSellRequestedWithMatchingToken(transactionToken);
+            logger.info("Payment callback token {} already processed (orderId={}) — skipping duplicate callback",
+                transactionToken, existing.getBuyOrder());
+            return existing;
+        }
+
         OrderPojo sellByToken = this.getSellRequestedWithMatchingToken(transactionToken);
         try {
+            OrderPojo result;
             if (wasAborted) {
-                return ordersProcessService.markAsAborted(sellByToken);
+                result = ordersProcessService.markAsAborted(sellByToken);
+                // P0.4: Log abort callback for idempotency
+                logCallback(transactionToken, sellByToken.getBuyOrder(),
+                    CallbackResult.ABORTED, result.getStatus(), null);
             } else {
-                return this.processSellPaymentStatus(sellByToken);
+                result = this.processSellPaymentStatus(sellByToken, transactionToken);
             }
+            return result;
         } catch (BadInputException e) {
             logger.error("Incorrect state of sell, was: {}", sellByToken.getStatus());
             throw new IllegalStateException("Transaction could not be confirmed");
@@ -294,19 +341,59 @@ public class CheckoutServiceImpl
         }
     }
 
-    private OrderPojo processSellPaymentStatus(OrderPojo sellByToken)
+    private OrderPojo processSellPaymentStatus(OrderPojo sellByToken, String transactionToken)
         throws EntityNotFoundException, PaymentServiceException {
-        int statusCode = paymentIntegrationService.requestPaymentResult(sellByToken.getToken());
+        PaymentResultPojo result = paymentIntegrationService.requestPaymentResultWithAmount(transactionToken);
+        OrderPojo outcome;
+        CallbackResult callbackResult;
         try {
-            if (statusCode != 0) {
-                return ordersProcessService.markAsFailed(sellByToken);
+            if (result.getResponseCode() != 0) {
+                outcome = ordersProcessService.markAsFailed(sellByToken);
+                callbackResult = CallbackResult.GATEWAY_ERROR;
             } else {
-                return ordersProcessService.markAsPaid(sellByToken);
+                // CRITICAL: verify the authorized amount matches the order total.
+                // This prevents fraud where a lower amount is charged but the order is created for more.
+                int authorized = result.getAuthorizedAmount();
+                int orderTotal = sellByToken.getTotalValue();
+                if (authorized != orderTotal) {
+                    logger.error("Payment amount mismatch for token {}: authorized={}, orderTotal={}",
+                        transactionToken, authorized, orderTotal);
+                    // Treat as failed — do not mark as paid for a mismatched amount.
+                    // Admin must investigate and handle manually.
+                    outcome = ordersProcessService.markAsFailed(sellByToken);
+                    callbackResult = CallbackResult.ABORTED;
+                } else {
+                    outcome = ordersProcessService.markAsPaid(sellByToken);
+                    callbackResult = CallbackResult.SUCCESS;
+                }
             }
         } catch (BadInputException e) {
             logger.error("Incorrect state of sell, was: {}", sellByToken.getStatus());
             throw new IllegalStateException("Transaction could not be confirmed");
         }
+
+        // P0.4: Log this callback so future duplicate callbacks are safely ignored.
+        // The existsByToken check at the top of confirmTransaction() prevents reprocessing.
+        // We use a try-block because the gateway may have already committed the transaction —
+        // failing to log should NOT roll back the payment confirmation.
+        try {
+            PaymentCallbackLog logEntry = PaymentCallbackLog.builder()
+                .token(transactionToken)
+                .orderId(sellByToken.getBuyOrder())
+                .result(callbackResult)
+                .orderStatusAfter(outcome.getStatus())
+                .authorizedAmount(result.getAuthorizedAmount())
+                .build();
+            paymentCallbackLogRepository.saveAndFlush(logEntry);
+        } catch (Exception e) {
+            // Log but do NOT fail — the payment has already been processed.
+            // Worst case: next duplicate callback will reprocess, but markAsPaid preconditions
+            // will reject it if the order is already PAID_UNCONFIRMED.
+            logger.error("Failed to log payment callback for token {}: {}",
+                transactionToken, e.getMessage());
+        }
+
+        return outcome;
     }
 
     private OrderPojo getSellRequestedWithMatchingToken(String transactionToken) throws EntityNotFoundException {
@@ -315,5 +402,48 @@ public class CheckoutServiceImpl
             "token", transactionToken));
         Predicate startedTransactionWithMatchingToken = ordersPredicateService.parseMap(startedWithTokenMatcher);
         return ordersCrudService.readOne(startedTransactionWithMatchingToken);
+    }
+
+    /**
+     * Validates that all cart items still have sufficient available stock at checkout time.
+     * Differs from CartServiceImpl.validateCartStock in that it checks reservation availability
+     * (stockCurrent - stockReserved), not just variant active status.
+     *
+     * @param cartItems Active cart items
+     * @return List of unavailable items (empty = all OK)
+     */
+    private List<CartItemPojo> validateCartStockForCheckout(List<CartItem> cartItems) {
+        return cartItems.stream()
+            .filter(item -> {
+                ProductVariant variant = item.getVariant();
+                Integer available = stockReservationService.getAvailableStock(variant.getSku());
+                return available == null || available < item.getQuantity() || !variant.isActive();
+            })
+            .map(item -> CartItemPojo.builder()
+                .variantSkuResolved(item.getVariant().getSku())
+                .quantity(item.getQuantity())
+                .build())
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * P0.4: Logs a payment callback for idempotency tracking.
+     * Failures are swallowed — callback processing must not fail due to logging.
+     */
+    private void logCallback(String token, Long orderId,
+                             CallbackResult result, String orderStatusAfter, Integer authorizedAmount) {
+        try {
+            PaymentCallbackLog logEntry = PaymentCallbackLog.builder()
+                .token(token)
+                .orderId(orderId)
+                .result(result)
+                .orderStatusAfter(orderStatusAfter)
+                .authorizedAmount(authorizedAmount)
+                .build();
+            paymentCallbackLogRepository.saveAndFlush(logEntry);
+        } catch (Exception e) {
+            logger.error("Failed to log payment callback for token {}: {}",
+                token, e.getMessage());
+        }
     }
 }

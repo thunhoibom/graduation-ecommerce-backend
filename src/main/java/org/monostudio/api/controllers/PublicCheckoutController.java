@@ -38,7 +38,7 @@ import static org.monostudio.config.Constants.WEBPAY_ABORTION_TOKEN_HEADER_NAME;
 import static org.monostudio.config.Constants.WEBPAY_SUCCESS_TOKEN_HEADER_NAME;
 
 @RestController
-@RequestMapping("/public/checkout")
+@RequestMapping("/api/public/checkout")
 @Tag(name = "Checkout")
 public class PublicCheckoutController {
     private final CheckoutService service;

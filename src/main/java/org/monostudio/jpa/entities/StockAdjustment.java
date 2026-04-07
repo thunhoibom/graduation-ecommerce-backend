@@ -132,7 +132,11 @@ public class StockAdjustment
         /** Admin manually adjusted stock */
         MANUAL_ADJUSTMENT,
         /** Periodic stock sync or inventory recount */
-        STOCK_RECOUNT
+        STOCK_RECOUNT,
+        /** Admin cancelled a paid order — stockCurrent restored to inventory */
+        ORDER_CANCELLED,
+        /** Admin rejected a paid order — stockCurrent restored to inventory */
+        ORDER_REJECTED
     }
 
     /**

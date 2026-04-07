@@ -35,7 +35,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/images")
+@RequestMapping("/api/data/images")
 @Tag(name = "Images management")
 @PreAuthorize("isAuthenticated()")
 public class DataImagesController
@@ -64,7 +64,7 @@ public class DataImagesController
     @Operation(summary = "Define new image links.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('images:create')")
-    public void create(@Valid @RequestBody ImagePojo input)
+    public void create( ImagePojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -74,7 +74,7 @@ public class DataImagesController
     @Operation(summary = "Replace image links data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('images:update')")
-    public void update(@Valid @RequestBody ImagePojo input, @RequestParam Map<String, String> requestParams)
+    public void update( ImagePojo input, @RequestParam Map<String, String> requestParams)
         throws EntityNotFoundException, BadInputException {
         super.update(input, requestParams);
     }

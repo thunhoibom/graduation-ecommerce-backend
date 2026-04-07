@@ -34,7 +34,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/user_roles")
+@RequestMapping("/api/data/user_roles")
 @Tag(name = "Params management")
 @PreAuthorize("isAuthenticated()")
 public class DataUserRolesController
@@ -63,7 +63,7 @@ public class DataUserRolesController
     @Operation(summary = "Define new user roles.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('user_roles:create')")
-    public void create(@Valid @RequestBody UserRolePojo input)
+    public void create( UserRolePojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -73,7 +73,7 @@ public class DataUserRolesController
     @Operation(summary = "Replace user roles data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('user_roles:update')")
-    public void update(@Valid @RequestBody UserRolePojo input, @RequestParam Map<String, String> requestParams)
+    public void update( UserRolePojo input, @RequestParam Map<String, String> requestParams)
         throws BadInputException, EntityNotFoundException {
         super.update(input, requestParams);
     }

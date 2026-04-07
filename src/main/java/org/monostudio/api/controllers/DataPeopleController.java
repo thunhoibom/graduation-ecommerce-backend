@@ -22,7 +22,7 @@ import org.monostudio.jpa.sortspecs.PeopleSortSpec;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/data/people")
+@RequestMapping("/api/data/people")
 @Tag(name = "People management")
 @PreAuthorize("isAuthenticated()")
 public class DataPeopleController

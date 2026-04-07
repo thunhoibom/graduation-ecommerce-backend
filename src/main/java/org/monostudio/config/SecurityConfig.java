@@ -17,14 +17,20 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 import org.monostudio.jpa.services.crud.CustomersCrudService;
 import org.monostudio.security.JwtGuestAuthenticationFilter;
 import org.monostudio.security.JwtLoginAuthenticationFilter;
 import org.monostudio.security.JwtTokenVerifierFilter;
 import org.monostudio.security.services.AuthorizationHeaderParserService;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import javax.crypto.SecretKey;
 
+import java.util.List;
+
+import org.springframework.http.HttpMethod;
 import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
 
 @Configuration
@@ -35,6 +41,7 @@ public class SecurityConfig {
     private final SecurityProperties securityProperties;
     private final AuthorizationHeaderParserService<Claims> jwtClaimsParserService;
     private final CustomersCrudService customersService;
+    private final CorsProperties corsProperties;
     private AuthenticationManager authenticationManager;
 
     @Autowired
@@ -42,12 +49,14 @@ public class SecurityConfig {
                           SecretKey secretKey,
                           SecurityProperties securityProperties,
                           AuthorizationHeaderParserService<Claims> jwtClaimsParserService,
-                          CustomersCrudService customersService) {
+                          CustomersCrudService customersService,
+                          CorsProperties corsProperties) {
         this.userDetailsService = userDetailsService;
         this.secretKey = secretKey;
         this.securityProperties = securityProperties;
         this.jwtClaimsParserService = jwtClaimsParserService;
         this.customersService = customersService;
+        this.corsProperties = corsProperties;
     }
 
     @Bean
@@ -58,17 +67,23 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(configure -> configure.sessionCreationPolicy(STATELESS))
             .authorizeHttpRequests(configure -> configure
-                .requestMatchers("/public/cart/**").permitAll()
-                .requestMatchers("/public/discount/**").permitAll()
-                .requestMatchers("/public/shipping/**").permitAll()
-                .requestMatchers("/public/checkout/**").permitAll()
-                .requestMatchers("/public/products/**").permitAll()
+                .requestMatchers("/api/public/cart", "/api/public/cart/**").permitAll()
+                .requestMatchers("/api/public/discount/**").permitAll()
+                .requestMatchers("/api/public/shipping/**").permitAll()
+                .requestMatchers("/api/public/checkout/**").permitAll()
+                .requestMatchers("/api/public/products/", "/api/public/products/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/data/products", "/api/data/products/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/data/product_categories", "/api/data/product_categories/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/data/images/**").permitAll()
+                .requestMatchers("/api/public/register").permitAll()
+                .requestMatchers("/api/swagger-ui/**", "/api/swagger-ui.html", "/api/v3/api-docs/**").permitAll()
                 .anyRequest().authenticated())
-            .addFilter(this.loginFilterForUrl("/public/login"))
-            .addFilterAfter(this.guestFilterForUrl("/public/guest"),
+            .addFilter(this.loginFilterForUrl("/api/public/auth/login"))
+            .addFilterAfter(this.guestFilterForUrl("/api/public/guest"),
                             JwtLoginAuthenticationFilter.class)
             .addFilterAfter(new JwtTokenVerifierFilter(jwtClaimsParserService),
                             JwtGuestAuthenticationFilter.class)
+            .cors(corsConfigurer -> corsConfigurer.configurationSource(corsConfigurationSource()))
             .build();
     }
 
@@ -109,5 +124,25 @@ public class SecurityConfig {
             customersService);
         filter.setFilterProcessesUrl(url);
         return filter;
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+
+        config.setAllowedOrigins(List.of(
+            "http://localhost:3000",
+            "https://localhost:3000",
+            "http://127.0.0.1:3000",
+            "https://127.0.0.1:3000"
+        ));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+
+        return source;
     }
 }

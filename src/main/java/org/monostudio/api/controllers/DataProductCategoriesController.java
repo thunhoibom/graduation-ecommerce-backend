@@ -35,7 +35,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/product_categories")
+@RequestMapping("/api/data/product_categories")
 @Tag(name = "Product Categories management")
 public class DataProductCategoriesController
     extends DataCrudGenericController<ProductCategoryPojo, ProductCategory> {
@@ -65,7 +65,7 @@ public class DataProductCategoriesController
     @Operation(summary = "Define new product categories.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('product_categories:create')")
-    public void create(@Valid @RequestBody ProductCategoryPojo input)
+    public void create(@RequestBody ProductCategoryPojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -75,7 +75,7 @@ public class DataProductCategoriesController
     @Operation(summary = "Replace product categories data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('product_categories:update')")
-    public void update(@Valid @RequestBody ProductCategoryPojo input, @RequestParam Map<String, String> requestParams)
+    public void update(@RequestBody ProductCategoryPojo input, @RequestParam Map<String, String> requestParams)
         throws BadInputException, EntityNotFoundException {
         super.update(input, requestParams);
     }

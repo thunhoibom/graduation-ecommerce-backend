@@ -9,6 +9,7 @@ import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.models.RefundResultPojo;
 import org.monostudio.mailing.MailingService;
 import org.monostudio.mailing.MailingServiceException;
+import org.monostudio.api.services.RefundRetryService;
 import org.monostudio.api.services.DiscountService;
 import org.monostudio.api.services.OrdersProcessService;
 import org.monostudio.api.services.StockReservationService;
@@ -16,6 +17,9 @@ import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.entities.OrderDetail;
 import org.monostudio.jpa.entities.OrderStatus;
+import org.monostudio.jpa.entities.StockAdjustment;
+import org.monostudio.jpa.repositories.CartItemsRepository;
+import org.monostudio.jpa.repositories.CartSessionsRepository;
 import org.monostudio.jpa.repositories.OrdersRepository;
 import org.monostudio.jpa.repositories.OrderDetailsRepository;
 import org.monostudio.jpa.repositories.OrderStatusesRepository;
@@ -62,6 +66,9 @@ public class OrdersProcessServiceImpl
     private final StockReservationService stockReservationService;
     private final DiscountService discountService;
     private final PaymentService paymentService;
+    private final RefundRetryService refundRetryService;
+    private final CartSessionsRepository cartSessionsRepository;
+    private final CartItemsRepository cartItemsRepository;
 
     public OrdersProcessServiceImpl(
         OrdersCrudService crudService,
@@ -73,7 +80,10 @@ public class OrdersProcessServiceImpl
         @Autowired(required = false) MailingService mailingService,
         StockReservationService stockReservationService,
         DiscountService discountService,
-        @Autowired(required = false) PaymentService paymentService
+        @Autowired(required = false) PaymentService paymentService,
+        @Autowired(required = false) RefundRetryService refundRetryService,
+        CartSessionsRepository cartSessionsRepository,
+        CartItemsRepository cartItemsRepository
     ) {
         this.crudService = crudService;
         this.ordersRepository = ordersRepository;
@@ -85,6 +95,9 @@ public class OrdersProcessServiceImpl
         this.stockReservationService = stockReservationService;
         this.discountService = discountService;
         this.paymentService = paymentService;
+        this.refundRetryService = refundRetryService;
+        this.cartSessionsRepository = cartSessionsRepository;
+        this.cartItemsRepository = cartItemsRepository;
     }
 
     private void sendClientEmail(OrderPojo order) {
@@ -116,7 +129,11 @@ public class OrdersProcessServiceImpl
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
         if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PENDING)) {
-            throw new BadInputException(THE_TRANSACTION_IS_NOT_IN_A_VALID_STATE_FOR_THIS_OPERATION);
+            // P0.5: Reject if order is not in PENDING — cannot restart payment for an already-started order.
+            throw new BadInputException(
+                "Cannot start payment for order " + existingOrder.getId()
+                    + " — current status is '" + existingOrder.getStatus().getName()
+                    + "', expected '" + ORDER_STATUS_PENDING + "'.");
         }
 
         Optional<OrderStatus> startedStatus = orderStatusesRepository.findByName(ORDER_STATUS_PAYMENT_STARTED);
@@ -137,7 +154,14 @@ public class OrdersProcessServiceImpl
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
         if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PAYMENT_STARTED)) {
-            throw new BadInputException(THE_TRANSACTION_IS_NOT_IN_A_VALID_STATE_FOR_THIS_OPERATION);
+            // P0.5: If order is not in PAYMENT_STARTED, it has already been processed.
+            // This can happen when the gateway retries a callback after the first succeeded.
+            // The order may already be PAID, CANCELLED, or FAILED — do not reprocess.
+            throw new BadInputException(
+                "Cannot abort order " + existingOrder.getId()
+                    + " — current status is '" + existingOrder.getStatus().getName()
+                    + "', expected '" + ORDER_STATUS_PAYMENT_STARTED + "'. "
+                    + "Possible duplicate callback — order may have already been processed.");
         }
 
         Optional<OrderStatus> abortedStatus = orderStatusesRepository.findByName(ORDER_STATUS_PAYMENT_CANCELLED);
@@ -163,7 +187,11 @@ public class OrdersProcessServiceImpl
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
         if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PAYMENT_STARTED)) {
-            throw new BadInputException(THE_TRANSACTION_IS_NOT_IN_A_VALID_STATE_FOR_THIS_OPERATION);
+            throw new BadInputException(
+                "Cannot mark order " + existingOrder.getId() + " as failed"
+                    + " — current status is '" + existingOrder.getStatus().getName()
+                    + "', expected '" + ORDER_STATUS_PAYMENT_STARTED + "'. "
+                    + "Possible duplicate callback.");
         }
 
         Optional<OrderStatus> failedStatus = orderStatusesRepository.findByName(ORDER_STATUS_PAYMENT_FAILED);
@@ -189,7 +217,16 @@ public class OrdersProcessServiceImpl
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
         if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PAYMENT_STARTED)) {
-            throw new BadInputException(THE_TRANSACTION_IS_NOT_IN_A_VALID_STATE_FOR_THIS_OPERATION);
+            // P0.5: Reject if order is not in PAYMENT_STARTED.
+            // This guards against race conditions and duplicate webhook callbacks.
+            // Note: PaymentCallbackLog in CheckoutServiceImpl is the primary defense;
+            // this is the secondary defense at the service layer.
+            throw new BadInputException(
+                "Cannot mark order " + existingOrder.getId() + " as paid"
+                    + " — current status is '" + existingOrder.getStatus().getName()
+                    + "', expected '" + ORDER_STATUS_PAYMENT_STARTED + "'. "
+                    + "This may be a duplicate payment callback. "
+                    + "If the order should already be PAID, no action is needed.");
         }
 
         Optional<OrderStatus> paidStatus = orderStatusesRepository.findByName(ORDER_STATUS_PAID_UNCONFIRMED);
@@ -214,11 +251,16 @@ public class OrdersProcessServiceImpl
         target.setStatus(ORDER_STATUS_PAID_UNCONFIRMED);
         target.setDetails(pojoDetails);
 
-        // Confirm stock reservations per-variant (not the whole session)
-        // This prevents double-deduction if the same cart is checked out twice
+        // Confirm stock reservations per-variant.
+        // FAIL-FAST: if ANY item fails to deduct (e.g. stock went to 0 between checkout start
+        // and payment confirmation), the entire order is rolled back. The customer must retry.
+        // We do NOT allow a "partial fill" order — the payment gateway has already charged the
+        // full amount and the customer expects all items.
         if (existingOrder.getCartSessionToken() != null) {
-            for (OrderDetail detail : orderDetailsRepository.findBySellId(existingOrder.getId())) {
+            List<OrderDetail> details = orderDetailsRepository.findBySellId(existingOrder.getId());
+            for (OrderDetail detail : details) {
                 if (detail.getProductVariant() != null) {
+                    // confirmItem throws IllegalStateException on deduct failure → triggers rollback
                     stockReservationService.confirmItem(
                         existingOrder.getCartSessionToken(),
                         detail.getProductVariant().getSku()
@@ -229,21 +271,28 @@ public class OrdersProcessServiceImpl
 
         // Redeem discount only after payment is confirmed — not when checkout starts.
         // This prevents "burning" a discount code when the customer abandons or fails payment.
+        // Throwing here is intentional: if redeem fails the transaction is rolled back and the
+        // customer must retry. An order cannot be marked PAID while the discount hasn't been
+        // recorded — that would let the customer reuse the same code on a second attempt.
         if (existingOrder.getDiscountCode() != null && !existingOrder.getDiscountCode().isBlank()) {
             int subtotal = existingOrder.getNetValue() + existingOrder.getTaxesValue();
             Long customerId = (existingOrder.getCustomer() != null) ? existingOrder.getCustomer().getId() : null;
-            try {
-                discountService.redeemDiscount(existingOrder.getDiscountCode(), subtotal, customerId);
-            } catch (BadInputException e) {
-                // Payment already succeeded — log but do not roll back the order.
-                // Admin can manually adjust the discount usage count if needed.
-                logger.warn("Failed to redeem discount code '{}' for order {}: {}",
-                    existingOrder.getDiscountCode(), existingOrder.getId(), e.getMessage());
-            }
+            discountService.redeemDiscount(existingOrder.getDiscountCode(), subtotal, customerId, existingOrder.getId());
         }
 
         sendClientEmail(target);
         sendOwnerEmail(target);
+
+        // Clear the cart session now that payment is confirmed and stock is deducted.
+        // This prevents stale cart items from appearing if the user reuses the session token.
+        if (existingOrder.getCartSessionToken() != null) {
+            cartSessionsRepository.findByToken(existingOrder.getCartSessionToken())
+                .ifPresent(session -> {
+                    cartItemsRepository.deleteAllBySessionId(session.getId());
+                    logger.info("Cart session {} cleared after successful checkout",
+                        session.getToken());
+                });
+        }
 
         return target;
     }
@@ -313,13 +362,49 @@ public class OrdersProcessServiceImpl
         target.setDetails(pojoDetails);
         target.setStatus(ORDER_STATUS_REJECTED);
 
-        // Release reserved stock — the order was rejected, so the items go back to available inventory.
-        // Note: since stock was already confirmed at markAsPaid, releasing here means decrementing
-        // stockReserved only (the confirmed reservation record). stockCurrent stays unchanged —
-        // the items have physically left the warehouse. Only non-confirmed reservations (if any)
-        // would need their stockCurrent restored. Here we release the reservation records.
+        // Restore stockCurrent: the order was rejected after payment, so the stock that was
+        // deducted at markAsPaid must be returned to available inventory.
         if (existingOrder.getCartSessionToken() != null) {
-            stockReservationService.release(existingOrder.getCartSessionToken());
+            for (OrderDetail detail : orderDetailsRepository.findBySellId(existingOrder.getId())) {
+                if (detail.getProductVariant() != null) {
+                    stockReservationService.restoreStockCurrent(
+                        existingOrder.getCartSessionToken(),
+                        detail.getProductVariant().getSku(),
+                        detail.getUnits(),
+                        existingOrder.getId(),
+                        StockAdjustment.StockAdjustmentReason.ORDER_REJECTED
+                    );
+                }
+            }
+        }
+
+        // P0.3: Initiate refund for the customer since payment was already captured.
+        // Precondition guarantees we are in PAID_UNCONFIRMED — payment WAS made.
+        // Enqueue refund via retry queue (same logic as markAsAdminCancelled).
+        if (existingOrder.getTransactionToken() != null && paymentService != null) {
+            try {
+                RefundResultPojo result = paymentService.refund(
+                    existingOrder.getTransactionToken(),
+                    existingOrder.getTotalValue()
+                );
+                if (result.isSuccess()) {
+                    logger.info("Order {} rejected: immediate refund succeeded, type={}",
+                        existingOrder.getId(), result.getType());
+                } else {
+                    logger.warn("Order {} rejected: refund rejected by gateway (code={}) — enqueuing for retry",
+                        existingOrder.getId(), result.getResponseCode());
+                    enqueueRefundRetry(existingOrder, "ORDER_REJECTED");
+                }
+            } catch (PaymentServiceException e) {
+                logger.error("Order {} rejected: refund gateway error ({}) — enqueuing for retry",
+                    existingOrder.getId(), e.getMessage());
+                enqueueRefundRetry(existingOrder, "ORDER_REJECTED");
+            }
+        } else {
+            // No payment service — log critical alert so admin knows money is stuck
+            logger.error("⚠️  CRITICAL: Order {} rejected but NO payment service available. "
+                    + "Customer has been charged {} cents but cannot be refunded automatically.",
+                existingOrder.getId(), existingOrder.getTotalValue());
         }
 
         sendClientEmail(target);
@@ -380,6 +465,10 @@ public class OrdersProcessServiceImpl
                 "Cannot cancel order in status '" + currentStatus + "'");
         }
 
+        // Determine if payment has already been made BEFORE changing the status
+        boolean wasPaid = currentStatus.equals(ORDER_STATUS_PAID_UNCONFIRMED)
+            || currentStatus.equals(ORDER_STATUS_PAID_CONFIRMED);
+
         Optional<OrderStatus> cancelledStatus =
             orderStatusesRepository.findByName(ORDER_STATUS_ADMIN_CANCELLED);
         if (cancelledStatus.isEmpty()) {
@@ -392,14 +481,32 @@ public class OrdersProcessServiceImpl
         OrderPojo target = convertOrThrowException(existingOrder);
         target.setStatus(ORDER_STATUS_ADMIN_CANCELLED);
 
-        // Release any outstanding stock reservations (e.g. if cancelled before payment was confirmed).
+        // Restore stock based on current order status:
+        // - PENDING / PAYMENT_STARTED: stock was reserved but never deducted → release reservation only
+        // - PAID_UNCONFIRMED / PAID_CONFIRMED: stock was deducted at markAsPaid → restore stockCurrent
         if (existingOrder.getCartSessionToken() != null) {
-            stockReservationService.release(existingOrder.getCartSessionToken());
+            if (wasPaid) {
+                // Stock was already deducted — restore it back to available inventory
+                for (OrderDetail detail : orderDetailsRepository.findBySellId(existingOrder.getId())) {
+                    if (detail.getProductVariant() != null) {
+                        stockReservationService.restoreStockCurrent(
+                            existingOrder.getCartSessionToken(),
+                            detail.getProductVariant().getSku(),
+                            detail.getUnits(),
+                            existingOrder.getId(),
+                            StockAdjustment.StockAdjustmentReason.ORDER_CANCELLED
+                        );
+                    }
+                }
+            } else {
+                // Payment not yet made — just release the reservation
+                stockReservationService.release(existingOrder.getCartSessionToken());
+            }
         }
 
         // If payment was already made, trigger a refund through the payment gateway.
-        boolean wasPaid = currentStatus.equals(ORDER_STATUS_PAID_UNCONFIRMED)
-            || currentStatus.equals(ORDER_STATUS_PAID_CONFIRMED);
+        // P0.2: On gateway failure, enqueue to refund retry queue instead of swallowing silently.
+        // The queue will retry automatically with exponential backoff. Admin is alerted on final failure.
         if (wasPaid && existingOrder.getTransactionToken() != null && paymentService != null) {
             try {
                 RefundResultPojo result = paymentService.refund(
@@ -407,16 +514,19 @@ public class OrdersProcessServiceImpl
                     existingOrder.getTotalValue()
                 );
                 if (result.isSuccess()) {
-                    logger.info("Admin cancelled order {}: refund triggered, type={}",
+                    logger.info("Admin cancelled order {}: refund succeeded, type={}",
                         existingOrder.getId(), result.getType());
                 } else {
-                    logger.warn("Admin cancelled order {}: refund call returned code={}",
+                    logger.warn("Admin cancelled order {}: refund rejected by gateway (code={}) — enqueuing for retry",
                         existingOrder.getId(), result.getResponseCode());
+                    enqueueRefundRetry(existingOrder, "ADMIN_CANCELLED");
                 }
             } catch (PaymentServiceException e) {
-                // Log but do not block — admin must handle refund manually if gateway fails.
-                logger.error("Admin cancelled order {}: refund gateway error: {}",
+                // Gateway unreachable or errored — enqueue for retry instead of swallowing
+                logger.error("Admin cancelled order {}: refund gateway error ({}). "
+                        + "Enqueued for automatic retry.",
                     existingOrder.getId(), e.getMessage());
+                enqueueRefundRetry(existingOrder, "ADMIN_CANCELLED");
             }
         }
 
@@ -463,5 +573,35 @@ public class OrdersProcessServiceImpl
             throw new IllegalStateException("Converter could not turn Sell into its Pojo equivalent");
         }
         return target;
+    }
+
+    /**
+     * Enqueues a failed refund for automatic retry via the RefundRetryQueue.
+     * P0.2: Replaces the previous "swallow exception and log" behavior.
+     */
+    private void enqueueRefundRetry(Order order, String reason) {
+        if (refundRetryService == null) {
+            // RefundRetryService not available — this is a critical gap.
+            // Log as CRITICAL so it is immediately visible in logs.
+            logger.error("⚠️  CRITICAL: RefundRetryService not available. "
+                    + "Refund FAILED and NOT enqueued for retry. OrderId={}, Amount={}, Reason={}. "
+                    + "Manual intervention required.",
+                order.getId(), order.getTotalValue(), reason);
+            return;
+        }
+
+        try {
+            refundRetryService.enqueueFailedRefund(
+                order.getId(),
+                order.getTransactionToken(),
+                order.getTotalValue(),
+                reason
+            );
+        } catch (Exception e) {
+            // If even the enqueue fails, this is a critical alert
+            logger.error("⚠️  CRITICAL: Failed to enqueue refund retry. "
+                    + "OrderId={}, Amount={}, Reason={}, Error={}. Manual intervention required.",
+                order.getId(), order.getTotalValue(), reason, e.getMessage());
+        }
     }
 }

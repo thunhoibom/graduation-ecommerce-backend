@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/public/shipping")
+@RequestMapping("/api/public/shipping")
 @Tag(name = "Public shipping")
 public class PublicShippingMethodsController {
     private final ShippingMethodsRepository shippingMethodsRepository;

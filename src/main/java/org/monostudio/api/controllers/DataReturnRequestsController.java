@@ -40,7 +40,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/return-requests")
+@RequestMapping("/api/data/return-requests")
 @Tag(name = "Return Requests management")
 @PreAuthorize("isAuthenticated()")
 public class DataReturnRequestsController
@@ -88,7 +88,7 @@ public class DataReturnRequestsController
     @Operation(summary = "Create a new return request.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('returnRequests:create')")
-    public void create(@Valid @RequestBody ReturnRequestPojo input)
+    public void create( ReturnRequestPojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -98,7 +98,7 @@ public class DataReturnRequestsController
     @Operation(summary = "Replace return request data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('returnRequests:update')")
-    public void update(@Valid @RequestBody ReturnRequestPojo input, @RequestParam Map<String, String> requestParams)
+    public void update( ReturnRequestPojo input, @RequestParam Map<String, String> requestParams)
         throws BadInputException, EntityNotFoundException {
         super.update(input, requestParams);
     }

@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.OrderPojo;
+import org.monostudio.api.models.PaymentResultPojo;
 import org.monostudio.api.models.RefundResultPojo;
 import org.monostudio.payment.PaymentService;
 import org.monostudio.payment.PaymentServiceException;
@@ -44,7 +45,8 @@ public class WebpayplusPaymentServiceImpl
     public PaymentRedirectionDetailsPojo requestNewPaymentPageDetails(OrderPojo transaction) throws PaymentServiceException {
         String buyOrder = transaction.getBuyOrder().toString();
         String sessionId = String.valueOf(transaction.hashCode());
-        double amount = transaction.getTotalValue();
+        // System stores amounts in cents; Webpay expects the currency's base unit (dollars)
+        double amount = transaction.getTotalValue() / 100.0;
         String returnUrl = properties.getCallbackUrl();
 
         WebpayPlus.Transaction webpayTransaction = this.createWebpayTransaction();
@@ -65,11 +67,26 @@ public class WebpayplusPaymentServiceImpl
 
     @Override
     public int requestPaymentResult(String transactionToken) throws PaymentServiceException {
-        WebpayPlus.Transaction webpayTransaction = this.createWebpayTransaction();
+        return requestPaymentResultWithAmount(transactionToken).getResponseCode();
+    }
+
+    @Override
+    public PaymentResultPojo requestPaymentResultWithAmount(String transactionToken) throws PaymentServiceException {
+        WebpayPlus.Transaction webpayTransaction = createWebpayTransaction();
         try {
-            return webpayTransaction.commit(transactionToken).getResponseCode();
+            var commitResponse = webpayTransaction.commit(transactionToken);
+            // Webpay returns amount in dollars; convert back to cents for comparison
+            int authorizedAmount = (int) Math.round(commitResponse.getAmount() * 100);
+            return PaymentResultPojo.builder()
+                .responseCode(commitResponse.getResponseCode())
+                .authorizedAmount(authorizedAmount)
+                .build();
         } catch (TransactionCommitException exc) {
-            return 1;
+            // Return failure response instead of throwing — caller handles the logic
+            return PaymentResultPojo.builder()
+                .responseCode(1)
+                .authorizedAmount(0)
+                .build();
         } catch (IOException exc) {
             logger.error("Exception raised while requesting transaction result: ", exc);
             throw new PaymentServiceException("Webpay failed to confirm the transaction");
@@ -92,7 +109,7 @@ public class WebpayplusPaymentServiceImpl
                 .success(response.getResponseCode() == 0)
                 .responseCode(response.getResponseCode())
                 .type(response.getType())
-                .balance(response.getBalance() != null ? response.getBalance().longValue() : 0L)
+                .balance(response.getBalance() != 0 ? (long) response.getBalance() : null)
                 .build();
         } catch (Exception exc) {
             logger.error("Refund failed for token {}: {}", transactionToken, exc.getMessage());

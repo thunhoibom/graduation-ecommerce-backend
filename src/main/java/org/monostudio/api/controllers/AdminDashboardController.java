@@ -21,7 +21,7 @@ import java.util.Collection;
  * All endpoints require authentication with the {@code dashboard:read} authority.
  */
 @RestController
-@RequestMapping("/admin/dashboard")
+@RequestMapping("/api/admin/dashboard")
 @Tag(name = "Admin Dashboard")
 @PreAuthorize("isAuthenticated()")
 public class AdminDashboardController {

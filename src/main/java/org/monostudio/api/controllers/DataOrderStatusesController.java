@@ -22,7 +22,7 @@ import org.monostudio.jpa.sortspecs.OrderStatusesSortSpec;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/data/order_statuses")
+@RequestMapping("/api/data/order_statuses")
 @Tag(name = "Params management")
 @PreAuthorize("isAuthenticated()")
 public class DataOrderStatusesController

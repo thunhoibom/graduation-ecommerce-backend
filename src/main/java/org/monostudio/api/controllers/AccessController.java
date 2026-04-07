@@ -27,7 +27,7 @@ import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 import static org.monostudio.config.Constants.JWT_PREFIX;
 
 @RestController
-@RequestMapping("/access")
+@RequestMapping("/api/access")
 @Tag(name = "User Accounts")
 @PreAuthorize("isAuthenticated()")
 public class AccessController {

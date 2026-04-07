@@ -35,6 +35,7 @@ public class OrderPojo {
     private int transportValue;
     private int totalValue;
     private int totalItems;
+    private int totalRefundedAmount;
     private String discountCode;
     private int discountValue;
     private String status;

@@ -29,7 +29,7 @@ import java.util.List;
  * Customer-authenticated endpoints for submitting and managing their own product reviews.
  */
 @RestController
-@RequestMapping("/account/reviews")
+@RequestMapping("/api/account/reviews")
 @Tag(name = "My Reviews")
 @PreAuthorize("isAuthenticated()")
 public class AccountReviewsController {

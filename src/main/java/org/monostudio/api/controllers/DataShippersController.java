@@ -35,7 +35,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/shippers")
+@RequestMapping("/api/data/shippers")
 @Tag(name = "Shippers management")
 public class DataShippersController
     extends DataCrudGenericController<ShipperPojo, Shipper> {
@@ -62,7 +62,7 @@ public class DataShippersController
     @Operation(summary = "Define new shippers.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('shippers:create')")
-    public void create(@Valid @RequestBody ShipperPojo input)
+    public void create( ShipperPojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -72,7 +72,7 @@ public class DataShippersController
     @Operation(summary = "Replace shippers data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('shippers:update')")
-    public void update(@Valid @RequestBody ShipperPojo input, @RequestParam Map<String, String> requestParams)
+    public void update( ShipperPojo input, @RequestParam Map<String, String> requestParams)
         throws BadInputException, EntityNotFoundException {
         super.update(input, requestParams);
     }

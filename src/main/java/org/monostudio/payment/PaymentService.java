@@ -1,6 +1,7 @@
 package org.monostudio.payment;
 
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
+import org.monostudio.api.models.PaymentResultPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.models.RefundResultPojo;
 
@@ -25,6 +26,16 @@ public interface PaymentService {
      * @throws PaymentServiceException If the payment service is caught under unexpected circumstances.
      */
     int requestPaymentResult(String transactionToken) throws PaymentServiceException;
+
+    /**
+     * Request the external payment service to report the status AND authorized amount
+     * of the transaction matching a given token.
+     *
+     * @param transactionToken The token to match the transaction with.
+     * @return PaymentResultPojo containing responseCode (0 = success) and authorizedAmount in cents.
+     * @throws PaymentServiceException If the payment service is caught under unexpected circumstances.
+     */
+    PaymentResultPojo requestPaymentResultWithAmount(String transactionToken) throws PaymentServiceException;
 
     /**
      * The configured frontend success page URL.

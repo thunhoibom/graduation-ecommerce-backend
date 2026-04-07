@@ -29,7 +29,7 @@ import java.util.Map;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/cart-sessions")
+@RequestMapping("/api/data/cart-sessions")
 @Tag(name = "Cart sessions — Admin read-only")
 public class DataCartSessionsController
     extends DataCrudGenericController<CartSessionPojo, CartSession> {

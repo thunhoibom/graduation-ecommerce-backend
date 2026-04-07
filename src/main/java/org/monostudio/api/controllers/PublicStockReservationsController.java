@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/public/cart/reservations")
+@RequestMapping("/api/public/cart/reservations")
 @Tag(name = "Cart — Stock Reservations")
 public class PublicStockReservationsController {
 

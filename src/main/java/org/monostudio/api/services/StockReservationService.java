@@ -2,6 +2,7 @@ package org.monostudio.api.services;
 
 import org.monostudio.api.models.StockReservationPojo;
 import org.monostudio.common.exceptions.BadInputException;
+import org.monostudio.jpa.entities.StockAdjustment;
 
 import java.util.List;
 
@@ -101,6 +102,23 @@ public interface StockReservationService {
      * @return Available quantity, or null if variant not found
      */
     Integer getAvailableStock(String variantSku);
+
+    // ─── Restore ────────────────────────────────────────────────────────────────
+
+    /**
+     * Restore stockCurrent after a paid order is cancelled or rejected.
+     * This adds the quantity back to stockCurrent AND decrements stockReserved
+     * (the reserved amount has been previously deducted from current at payment confirmation).
+     * Used only for orders that were PAID before being cancelled/rejected.
+     *
+     * @param sessionId   Cart session token
+     * @param variantSku  SKU of the variant to restore
+     * @param quantity    Number of units to return to available stock
+     * @param orderId     Order ID for audit logging
+     * @param reason      The adjustment reason — ORDER_CANCELLED or ORDER_REJECTED
+     */
+    void restoreStockCurrent(String sessionId, String variantSku, int quantity, Long orderId,
+        StockAdjustment.StockAdjustmentReason reason);
 
     // ─── Maintenance ───────────────────────────────────────────────────────────
 

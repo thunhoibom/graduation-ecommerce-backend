@@ -11,7 +11,7 @@ import org.monostudio.api.models.DiscountValidationResult;
 import org.monostudio.api.services.DiscountService;
 
 @RestController
-@RequestMapping("/public/discount")
+@RequestMapping("/api/public/discount")
 @Tag(name = "Discount codes (public)")
 public class PublicDiscountController {
 
@@ -25,6 +25,8 @@ public class PublicDiscountController {
     /**
      * GET /public/discount/validate?code=SUMMER20&subtotal=200000
      * Validates a discount code against a cart subtotal and returns the computed discount.
+     * Note: customerId is null here — per-customer limit check runs at markAsPaid
+     * when the actual customer is resolved from the order.
      */
     @GetMapping("/validate")
     @Operation(summary = "Validate a discount code against a cart subtotal")
@@ -32,6 +34,6 @@ public class PublicDiscountController {
         @RequestParam("code") String code,
         @RequestParam("subtotal") int subtotal
     ) {
-        return discountService.validateDiscount(code, subtotal);
+        return discountService.validateDiscount(code, subtotal, null);
     }
 }

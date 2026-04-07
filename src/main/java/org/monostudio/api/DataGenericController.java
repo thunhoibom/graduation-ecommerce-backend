@@ -4,6 +4,7 @@ import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Predicate;
 import org.springframework.data.domain.Sort;
 import org.springframework.lang.Nullable;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.monostudio.api.models.DataPagePojo;
 import org.monostudio.api.services.PaginationService;
 import org.monostudio.jpa.services.CrudService;
@@ -19,6 +20,7 @@ import java.util.Map;
  * @param <M> The model class
  * @param <E> The entity class
  */
+@RequestMapping("/api")
 public abstract class DataGenericController<M, E>
     implements DataController<M> {
     protected final PaginationService paginationService;

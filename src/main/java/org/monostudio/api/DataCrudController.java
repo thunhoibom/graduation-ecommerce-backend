@@ -4,13 +4,14 @@ import org.monostudio.common.exceptions.BadInputException;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.validation.Valid;
 import java.util.Map;
 
 public interface DataCrudController<M> {
 
-    void create(M input) throws BadInputException, EntityExistsException;
+    void create(@Valid M input) throws BadInputException, EntityExistsException;
 
-    void update(M input, Map<String, String> requestParams) throws BadInputException, EntityNotFoundException;
+    void update(@Valid M input, Map<String, String> requestParams) throws BadInputException, EntityNotFoundException;
 
     void partialUpdate(Map<String, Object> input, Map<String, String> requestParams) throws BadInputException, EntityNotFoundException;
 

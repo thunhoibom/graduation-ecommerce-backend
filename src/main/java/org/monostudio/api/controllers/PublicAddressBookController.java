@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/public/address-book")
+@RequestMapping("/api/public/address-book")
 @Tag(name = "Address Book")
 @PreAuthorize("isAuthenticated()")
 public class PublicAddressBookController {

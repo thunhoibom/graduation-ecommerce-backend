@@ -35,7 +35,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/users")
+@RequestMapping("/api/data/users")
 @Tag(name = "Users management")
 @PreAuthorize("isAuthenticated()")
 public class DataUsersController
@@ -64,7 +64,7 @@ public class DataUsersController
     @Operation(summary = "Register new users.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('users:create')")
-    public void create(@Valid @RequestBody UserPojo input)
+    public void create( UserPojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -74,7 +74,7 @@ public class DataUsersController
     @Operation(summary = "Replace users data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('users:update')")
-    public void update(@Valid @RequestBody UserPojo input, @RequestParam Map<String, String> requestParams)
+    public void update( UserPojo input, @RequestParam Map<String, String> requestParams)
         throws BadInputException, EntityNotFoundException {
         super.update(input, requestParams);
     }

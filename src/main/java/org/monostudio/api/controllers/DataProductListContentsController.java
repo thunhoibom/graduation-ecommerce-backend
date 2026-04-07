@@ -49,7 +49,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/product_list_contents")
+@RequestMapping("/api/data/product_list_contents")
 @Tag(name = "Product Lists management")
 public class DataProductListContentsController {
     private static final String ITEM_NOT_FOUND = "Requested item(s) not found";

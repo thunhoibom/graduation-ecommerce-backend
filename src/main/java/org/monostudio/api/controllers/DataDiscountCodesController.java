@@ -35,7 +35,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/discount-codes")
+@RequestMapping("/api/data/discount-codes")
 @Tag(name = "Discount codes management")
 public class DataDiscountCodesController
     extends DataCrudGenericController<DiscountCodePojo, DiscountCode> {
@@ -62,7 +62,7 @@ public class DataDiscountCodesController
     @Operation(summary = "Create a new discount code.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('discountCodes:create')")
-    public void create(@Valid @RequestBody DiscountCodePojo input)
+    public void create( DiscountCodePojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -72,7 +72,7 @@ public class DataDiscountCodesController
     @Operation(summary = "Replace discount code data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('discountCodes:update')")
-    public void update(@Valid @RequestBody DiscountCodePojo input,
+    public void update( DiscountCodePojo input,
                        @RequestParam Map<String, String> requestParams)
         throws BadInputException, EntityNotFoundException {
         super.update(input, requestParams);

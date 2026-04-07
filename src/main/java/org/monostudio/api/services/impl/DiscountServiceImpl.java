@@ -10,7 +10,11 @@ import org.monostudio.api.models.DiscountValidationResult;
 import org.monostudio.api.services.DiscountService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.DiscountCode;
+import org.monostudio.jpa.entities.DiscountUsage;
+import org.monostudio.jpa.repositories.CustomersRepository;
 import org.monostudio.jpa.repositories.DiscountCodesRepository;
+import org.monostudio.jpa.repositories.DiscountUsagesRepository;
+import org.monostudio.jpa.repositories.OrdersRepository;
 
 import java.time.LocalDateTime;
 
@@ -21,15 +25,26 @@ public class DiscountServiceImpl
     private static final Logger logger = LoggerFactory.getLogger(DiscountServiceImpl.class);
 
     private final DiscountCodesRepository discountCodesRepository;
+    private final DiscountUsagesRepository discountUsagesRepository;
+    private final CustomersRepository customersRepository;
+    private final OrdersRepository ordersRepository;
 
     @Autowired
-    public DiscountServiceImpl(DiscountCodesRepository discountCodesRepository) {
+    public DiscountServiceImpl(
+        DiscountCodesRepository discountCodesRepository,
+        DiscountUsagesRepository discountUsagesRepository,
+        CustomersRepository customersRepository,
+        OrdersRepository ordersRepository
+    ) {
         this.discountCodesRepository = discountCodesRepository;
+        this.discountUsagesRepository = discountUsagesRepository;
+        this.customersRepository = customersRepository;
+        this.ordersRepository = ordersRepository;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public DiscountValidationResult validateDiscount(String code, int subtotal) {
+    public DiscountValidationResult validateDiscount(String code, int subtotal, Long customerId) {
         if (StringUtils.isBlank(code)) {
             return DiscountValidationResult.noDiscount();
         }
@@ -64,18 +79,15 @@ public class DiscountServiceImpl
             return DiscountValidationResult.invalid("This discount code has reached its usage limit");
         }
 
-        // Check per-customer usage limit.
-        // NOTE: Full enforcement requires a DiscountUsage tracking table
-        // (discount_code_id, customer_id, use_count). Without it, this check
-        // is a soft guard only — the global useCount above is the authoritative limit.
-        // TODO: Create DiscountUsage entity to track (discount_code, customer_id) usage
-        //       and add a DiscountUsagesRepository.countByCodeAndCustomer(code, customerId) query.
-        // Until DiscountUsage exists, per-customer limits cannot be fully enforced.
-        // The global useCount provides a hard ceiling in the meantime.
-        if (discount.getMaxUsesPerCustomer() != null) {
-            logger.debug("maxUsesPerCustomer={} set for code '{}', but per-customer "
-                + "usage tracking is not yet implemented — relying on global useCount",
-                discount.getMaxUsesPerCustomer(), discount.getCode());
+        // Check per-customer usage limit using DiscountUsage table.
+        if (discount.getMaxUsesPerCustomer() != null && customerId != null) {
+            int customerUseCount = discountUsagesRepository
+                .countByDiscountIdAndCustomerId(discount.getId(), customerId);
+            if (customerUseCount >= discount.getMaxUsesPerCustomer()) {
+                return DiscountValidationResult.invalid(
+                    "You have already used this discount code " + customerUseCount
+                        + " time(s). Maximum allowed: " + discount.getMaxUsesPerCustomer());
+            }
         }
 
         // Check minimum cart value
@@ -100,12 +112,12 @@ public class DiscountServiceImpl
 
     @Override
     @Transactional
-    public void redeemDiscount(String code, int subtotal, Long customerId) throws BadInputException {
+    public void redeemDiscount(String code, int subtotal, Long customerId, Long orderId) throws BadInputException {
         if (StringUtils.isBlank(code)) {
             throw new BadInputException("Discount code is required");
         }
 
-        DiscountValidationResult validation = validateDiscount(code, subtotal);
+        DiscountValidationResult validation = validateDiscount(code, subtotal, customerId);
         if (!validation.isValid()) {
             throw new BadInputException(validation.getMessage());
         }
@@ -113,13 +125,25 @@ public class DiscountServiceImpl
         DiscountCode discount = discountCodesRepository.findByCodeIgnoreCase(code)
             .orElseThrow(() -> new BadInputException("Invalid discount code"));
 
-        // Atomic increment of use count
+        // Atomic increment of global use count
         int rows = discountCodesRepository.incrementUseCount(discount.getId());
         if (rows == 0) {
             throw new BadInputException("Failed to apply discount — code may have reached its limit");
         }
 
-        logger.info("Redeemed discount code '{}' for customer {}", code, customerId);
+        // Record per-customer usage for per-customer limit enforcement on future orders
+        if (customerId != null) {
+            var customer = customersRepository.findById(customerId).orElse(null);
+            var order    = orderId != null ? ordersRepository.getReferenceById(orderId) : null;
+            DiscountUsage usage = DiscountUsage.builder()
+                .discountCode(discount)
+                .customer(customer)
+                .order(order)
+                .build();
+            discountUsagesRepository.saveAndFlush(usage);
+        }
+
+        logger.info("Redeemed discount code '{}' for customer {}, orderId={}", code, customerId, orderId);
     }
 
     private int calculateDiscountAmount(DiscountCode discount, int subtotal) {

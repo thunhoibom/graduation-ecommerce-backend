@@ -35,7 +35,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/shipping-methods")
+@RequestMapping("/api/data/shipping-methods")
 @Tag(name = "Shipping methods management")
 public class DataShippingMethodsController
     extends DataCrudGenericController<ShippingMethodPojo, ShippingMethod> {
@@ -62,7 +62,7 @@ public class DataShippingMethodsController
     @Operation(summary = "Define new shipping methods.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('shipping-methods:create')")
-    public void create(@Valid @RequestBody ShippingMethodPojo input)
+    public void create( ShippingMethodPojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -72,7 +72,7 @@ public class DataShippingMethodsController
     @Operation(summary = "Replace shipping methods data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('shipping-methods:update')")
-    public void update(@Valid @RequestBody ShippingMethodPojo input, @RequestParam Map<String, String> requestParams)
+    public void update( ShippingMethodPojo input, @RequestParam Map<String, String> requestParams)
         throws BadInputException, EntityNotFoundException {
         super.update(input, requestParams);
     }

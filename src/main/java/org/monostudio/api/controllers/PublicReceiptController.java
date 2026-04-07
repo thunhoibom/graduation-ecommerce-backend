@@ -15,7 +15,7 @@ import org.monostudio.common.exceptions.BadInputException;
 import jakarta.persistence.EntityNotFoundException;
 
 @RestController
-@RequestMapping("/public/receipt")
+@RequestMapping("/api/public/receipt")
 @Tag(name = "Checkout")
 public class PublicReceiptController {
     private final ReceiptService receiptService;

@@ -21,7 +21,7 @@ import org.monostudio.jpa.sortspecs.BillingTypesSortSpec;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/data/billing_types")
+@RequestMapping("/api/data/billing_types")
 @Tag(name = "Params management")
 public class DataBillingTypesController
     extends DataGenericController<BillingTypePojo, BillingType> {

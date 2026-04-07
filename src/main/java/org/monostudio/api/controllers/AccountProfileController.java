@@ -17,7 +17,7 @@ import jakarta.persistence.EntityNotFoundException;
 import java.security.Principal;
 
 @RestController
-@RequestMapping("/account/profile")
+@RequestMapping("/api/account/profile")
 @Tag(name = "User Accounts")
 @PreAuthorize("isAuthenticated()")
 public class AccountProfileController {

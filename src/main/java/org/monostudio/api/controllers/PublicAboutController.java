@@ -10,7 +10,7 @@ import org.monostudio.api.models.CompanyDetailsPojo;
 import org.monostudio.api.services.CompanyService;
 
 @RestController
-@RequestMapping("/public/about")
+@RequestMapping("/api/public/about")
 @Tag(name = "About")
 public class PublicAboutController {
 

@@ -35,7 +35,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/product-variants")
+@RequestMapping("/api/data/product-variants")
 @Tag(name = "Product variants management")
 public class DataProductVariantsController
     extends DataCrudGenericController<ProductVariantPojo, ProductVariant> {
@@ -62,7 +62,7 @@ public class DataProductVariantsController
     @Operation(summary = "Define a new product variant.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('productVariants:create')")
-    public void create(@Valid @RequestBody ProductVariantPojo input)
+    public void create( ProductVariantPojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -72,7 +72,7 @@ public class DataProductVariantsController
     @Operation(summary = "Replace product variant data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('productVariants:update')")
-    public void update(@Valid @RequestBody ProductVariantPojo input,
+    public void update( ProductVariantPojo input,
                       @RequestParam Map<String, String> requestParams)
         throws BadInputException, EntityNotFoundException {
         super.update(input, requestParams);

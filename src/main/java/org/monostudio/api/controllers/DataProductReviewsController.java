@@ -40,7 +40,7 @@ import java.util.Map;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/product-reviews")
+@RequestMapping("/api/data/product-reviews")
 @Tag(name = "Product Reviews — Admin")
 @PreAuthorize("hasAuthority('productReviews:read')")
 public class DataProductReviewsController
@@ -77,7 +77,7 @@ public class DataProductReviewsController
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('productReviews:create')")
     public void create(
-        @Valid @RequestBody ProductReviewPojo input,
+         ProductReviewPojo input,
         @RequestParam Long customerId
     ) throws BadInputException, EntityExistsException {
         productReviewsCrudService.createReview(input, customerId);

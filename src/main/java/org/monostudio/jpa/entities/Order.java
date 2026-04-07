@@ -109,6 +109,15 @@ public class Order
     private String cartSessionToken;
 
     /**
+     * Total amount already refunded for this order (in cents).
+     * Used to ensure cumulative refunds do not exceed the order's totalValue.
+     * Updated automatically by ReturnRequestService when a refund is completed.
+     */
+    @Column(name = "order_total_refunded_amount", nullable = false)
+    @Builder.Default
+    private int totalRefundedAmount = 0;
+
+    /**
      * Please note that this copy-constructor only preserves the following relationships.
      * <ul>
      *   <li>OrderStatus</li>
@@ -140,5 +149,6 @@ public class Order
         this.shippingAddress = null;
         this.salesperson = null;
         this.cartSessionToken = source.cartSessionToken;
+        this.totalRefundedAmount = source.totalRefundedAmount;
     }
 }

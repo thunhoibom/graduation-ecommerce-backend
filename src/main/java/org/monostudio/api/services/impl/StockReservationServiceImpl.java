@@ -39,7 +39,7 @@ public class StockReservationServiceImpl
         StockReservationsRepository stockReservationsRepository,
         ProductVariantsRepository productVariantsRepository,
         StockAdjustmentService stockAdjustmentService,
-        MailingService mailingService
+        @Autowired(required = false) MailingService mailingService
     ) {
         this.stockReservationsRepository = stockReservationsRepository;
         this.productVariantsRepository = productVariantsRepository;
@@ -328,9 +328,17 @@ public class StockReservationServiceImpl
 
             int rows = stockReservationsRepository.confirmDeduct(variantId, quantity);
             if (rows == 0) {
-                logger.warn("Confirm deduct failed for variant {}: insufficient stock", variantId);
-                // Still mark as confirmed to avoid dangling reservations
-                // Partial fill is not handled here — caller should check order totals
+                // CRITICAL FIX (P0.1): Throwing instead of silent-continuing.
+                // Before: order was marked PAID but stock was NOT deducted — customer charged
+                //          but inventory unchanged. Order stuck at PAID_UNCONFIRMED forever.
+                // After:  IllegalStateException propagates → Spring rolls back entire transaction
+                //          → customer is NOT charged (payment gateway rolled back).
+                // This is consistent with confirmItem() behavior already in markAsPaid().
+                throw new IllegalStateException(
+                    "Stock deduction failed for variant " + variantId
+                        + " (sku=" + reservation.getVariant().getSku() + ")"
+                        + ": available stock may be insufficient or reserved by another checkout."
+                        + " Order will NOT be marked as paid. Customer should retry.");
             }
 
             stockReservationsRepository.updateStatus(
@@ -414,6 +422,43 @@ public class StockReservationServiceImpl
 
         reservation.setStatus(StockReservation.STATUS_CONFIRMED);
         return toPojo(reservation);
+    }
+
+    // ─── Restore ────────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public void restoreStockCurrent(
+        String sessionId,
+        String variantSku,
+        int quantity,
+        Long orderId,
+        StockAdjustment.StockAdjustmentReason reason
+    ) {
+        ProductVariant variant = productVariantsRepository.findBySku(variantSku).orElse(null);
+        if (variant == null) {
+            logger.warn("Cannot restore stock — variant not found: {}", variantSku);
+            return;
+        }
+
+        // restoreStock does: stockCurrent += quantity, stockReserved += quantity
+        // This reverses the deduction made at payment confirmation.
+        stockReservationsRepository.restoreStock(variant.getId(), quantity);
+
+        // Log audit trail
+        stockAdjustmentService.recordForVariant(
+            variant,
+            reason,
+            quantity,
+            "Stock restored after " + reason.name().toLowerCase().replace("_", " "),
+            sessionId,
+            orderId,
+            null,
+            null
+        );
+
+        logger.info("Restored {} units to variant {} (orderId={}, reason={})",
+            quantity, variantSku, orderId, reason);
     }
 
     // ─── Confirm ────────────────────────────────────────────────────────────────

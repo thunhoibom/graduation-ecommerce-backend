@@ -20,7 +20,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 
 @RestController
-@RequestMapping("/public/products")
+@RequestMapping("/api/public/products")
 @Tag(name = "Product Reviews")
 public class PublicProductReviewsController {
 

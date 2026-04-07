@@ -41,7 +41,7 @@ import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
 @RestController
-@RequestMapping("/data/orders")
+@RequestMapping("/api/data/orders")
 @Tag(name = "Orders management")
 @PreAuthorize("isAuthenticated()")
 public class DataOrdersController
@@ -95,7 +95,7 @@ public class DataOrdersController
     @Operation(summary = "Create new orders.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('orders:create')")
-    public void create(@Valid @RequestBody OrderPojo input)
+    public void create( OrderPojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -105,7 +105,7 @@ public class DataOrdersController
     @Operation(summary = "Replace orders data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('orders:update')")
-    public void update(@Valid @RequestBody OrderPojo input, @RequestParam Map<String, String> requestParams)
+    public void update( OrderPojo input, @RequestParam Map<String, String> requestParams)
         throws BadInputException, EntityNotFoundException {
         super.update(input, requestParams);
     }

@@ -112,6 +112,7 @@ public class OrdersConverterServiceImpl
             .discountCode(source.getDiscountCode())
             .discountValue(source.getDiscountValue())
             .cartSessionToken(source.getCartSessionToken())
+            .totalRefundedAmount(source.getTotalRefundedAmount())
             .build();
 
         PersonPojo customer = customersConverterService.convertToPojo(source.getCustomer());
