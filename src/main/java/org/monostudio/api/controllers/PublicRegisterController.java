@@ -15,7 +15,7 @@ import jakarta.persistence.EntityExistsException;
 import jakarta.validation.Valid;
 
 @RestController
-@RequestMapping("/api/public/register")
+@RequestMapping("/api/public/auth/register")
 @Tag(name = "User Accounts")
 public class PublicRegisterController {
     private final RegistrationService registrationService;

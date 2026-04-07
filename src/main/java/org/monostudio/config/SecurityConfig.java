@@ -75,8 +75,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/data/products", "/api/data/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/data/product_categories", "/api/data/product_categories/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/data/images/**").permitAll()
-                .requestMatchers("/api/public/register").permitAll()
-                .requestMatchers("/api/swagger-ui/**", "/api/swagger-ui.html", "/api/v3/api-docs/**").permitAll()
+                .requestMatchers("/api/public/auth/register").permitAll()
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 .anyRequest().authenticated())
             .addFilter(this.loginFilterForUrl("/api/public/auth/login"))
             .addFilterAfter(this.guestFilterForUrl("/api/public/guest"),
