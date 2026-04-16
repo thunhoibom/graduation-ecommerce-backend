@@ -157,4 +157,21 @@ public interface CrudService<M, E> {
      * @throws EntityNotFoundException When no item matches given filters.
      */
     void delete(Predicate filters) throws EntityNotFoundException;
+
+    /**
+     * Retrieves an item by its id.
+     *
+     * @param id The entity id
+     * @return The model representing the entity
+     * @throws EntityNotFoundException When no item matches the given id.
+     */
+    M findById(Long id) throws EntityNotFoundException;
+
+    /**
+     * Deletes an item by its id.
+     *
+     * @param id The entity id
+     * @throws EntityNotFoundException When no item matches the given id.
+     */
+    void delete(Long id) throws EntityNotFoundException;
 }

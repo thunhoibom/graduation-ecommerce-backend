@@ -54,6 +54,7 @@ ehthumbs.db
 !.env.example
 secrets/
 credentials/
+application-secrets.properties
 
 # H2 database files
 *.db

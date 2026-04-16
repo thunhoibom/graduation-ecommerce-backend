@@ -8,6 +8,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.monostudio.api.models.AppError;
 import org.monostudio.common.exceptions.BadInputException;
+import org.monostudio.payment.PaymentServiceException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
@@ -15,6 +18,7 @@ import java.util.List;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 /**
  * Catches some known exceptions, commonly declared at the controller level.<br/>
@@ -58,7 +62,7 @@ public class ExceptionsControllerAdvice {
     public AppError handleException(BadInputException ex) {
         return AppError.builder()
             .code("REJECTED_01")
-            .message("The request body did not meet the required criteria")
+            .message(ex.getMessage())
             .canRetry(true)
             .build();
     }
@@ -82,6 +86,26 @@ public class ExceptionsControllerAdvice {
             .code("REJECTED_02")
             .message("The request body did not meet the basic required criteria for acceptance")
             .detailMessage(stringBuilder.toString())
+            .build();
+    }
+
+    @ResponseStatus(BAD_REQUEST)
+    @ExceptionHandler(PaymentServiceException.class)
+    public AppError handlePaymentException(PaymentServiceException ex) {
+        return AppError.builder()
+            .code("PAYMENT_01")
+            .message(ex.getMessage())
+            .canRetry(true)
+            .build();
+    }
+
+    @ResponseStatus(UNAUTHORIZED)
+    @ExceptionHandler({AuthenticationException.class, AccessDeniedException.class})
+    public AppError handleAuthException(Exception ex) {
+        return AppError.builder()
+            .code("AUTH_01")
+            .message("Authentication or access denied")
+            .canRetry(false)
             .build();
     }
 }

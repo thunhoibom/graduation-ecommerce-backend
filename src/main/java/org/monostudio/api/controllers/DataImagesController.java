@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -70,35 +71,36 @@ public class DataImagesController
     }
 
     @Override
-    @PutMapping
+    @PutMapping("/{id}")
     @Operation(summary = "Replace image links data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('images:update')")
-    public void update( ImagePojo input, @RequestParam Map<String, String> requestParams)
+    public void update(ImagePojo input, @PathVariable Long id)
         throws EntityNotFoundException, BadInputException {
-        super.update(input, requestParams);
+        crudService.update(input, id);
     }
 
     @Override
-    @PatchMapping
+    @PatchMapping("/{id}")
     @Operation(summary = "Update parts of image links data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('images:update')")
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
-        @RequestParam Map<String, String> requestParams
+        @PathVariable Long id
     ) throws BadInputException, EntityNotFoundException {
-        super.partialUpdate(input, requestParams);
+        crudService.partialUpdate(input, id)
+            .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
     @Override
-    @DeleteMapping
+    @DeleteMapping("/{id}")
     @Operation(summary = "Remove image links.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('images:delete')")
-    public void delete(@RequestParam Map<String, String> requestParams)
+    public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
-        super.delete(requestParams);
+        crudService.delete(id);
     }
 
     @Override

@@ -1,6 +1,7 @@
 package org.monostudio.api.controllers;
 
 import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.Predicate;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,8 +25,12 @@ import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.ProductCategory;
 import org.monostudio.jpa.services.SortSpecParserService;
 import org.monostudio.jpa.services.crud.ProductCategoriesCrudService;
+import org.monostudio.jpa.services.crud.ProductsCrudService;
+import org.monostudio.api.models.ProductPojo;
 import org.monostudio.jpa.services.predicates.ProductCategoriesPredicateService;
+import org.monostudio.jpa.services.predicates.ProductsPredicateService;
 import org.monostudio.jpa.sortspecs.ProductCategoriesSortSpec;
+import org.monostudio.jpa.sortspecs.ProductsSortSpec;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
@@ -40,14 +46,21 @@ import static org.springframework.http.HttpStatus.NO_CONTENT;
 public class DataProductCategoriesController
     extends DataCrudGenericController<ProductCategoryPojo, ProductCategory> {
 
+    private final ProductsCrudService productsCrudService;
+    private final ProductsPredicateService productsPredicateService;
+
     @Autowired
     public DataProductCategoriesController(
         PaginationService paginationService,
         SortSpecParserService sortService,
         ProductCategoriesCrudService crudService,
-        ProductCategoriesPredicateService predicateService
+        ProductCategoriesPredicateService predicateService,
+        ProductsCrudService productsCrudService,
+        ProductsPredicateService productsPredicateService
     ) {
         super(paginationService, sortService, crudService, predicateService);
+        this.productsCrudService = productsCrudService;
+        this.productsPredicateService = productsPredicateService;
     }
 
     @Override
@@ -58,6 +71,27 @@ public class DataProductCategoriesController
             allRequestParams = Map.of("parentId", "");
         }
         return super.readMany(allRequestParams);
+    }
+
+    @GetMapping("/{code:^[a-zA-Z0-9\\-]+$}")
+    @Operation(summary = "Get product category by code.")
+    public ProductCategoryPojo readOne(@PathVariable String code) {
+        return crudService.readOne(predicateService.parseMap(Map.of("code", code)));
+    }
+
+    @GetMapping("/{code:^[a-zA-Z0-9\\-]+$}/products")
+    @Operation(summary = "List products for a category code.")
+    public DataPagePojo<ProductPojo> listProductsByCategory(
+        @PathVariable String code,
+        @RequestParam Map<String, String> params
+    ) {
+        int pageIndex = paginationService.determineRequestedPageIndex(params);
+        int pageSize = paginationService.determineRequestedPageSize(params);
+        params = new java.util.HashMap<>(params);
+        params.put("categoryCode", code);
+        Predicate filters = productsPredicateService.parseMap(params);
+        org.springframework.data.domain.Sort order = sortService.parse(ProductsSortSpec.ORDER_SPEC_MAP, params);
+        return productsCrudService.readMany(pageIndex, pageSize, order, filters);
     }
 
     @Override
@@ -71,35 +105,36 @@ public class DataProductCategoriesController
     }
 
     @Override
-    @PutMapping
+    @PutMapping("/{id}")
     @Operation(summary = "Replace product categories data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('product_categories:update')")
-    public void update(@RequestBody ProductCategoryPojo input, @RequestParam Map<String, String> requestParams)
+    public void update(@RequestBody ProductCategoryPojo input, @PathVariable Long id)
         throws BadInputException, EntityNotFoundException {
-        super.update(input, requestParams);
+        crudService.update(input, id);
     }
 
     @Override
-    @PatchMapping
+    @PatchMapping("/{id}")
     @Operation(summary = "Update parts of product categories data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('product_categories:update')")
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
-        @RequestParam Map<String, String> requestParams
+        @PathVariable Long id
     ) throws BadInputException, EntityNotFoundException {
-        super.partialUpdate(input, requestParams);
+        crudService.partialUpdate(input, id)
+            .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
     @Override
-    @DeleteMapping
+    @DeleteMapping("/{id}")
     @Operation(summary = "Remove product categories.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('product_categories:delete')")
-    public void delete(@RequestParam Map<String, String> requestParams)
+    public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
-        super.delete(requestParams);
+        crudService.delete(id);
     }
 
     @Override

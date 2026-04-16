@@ -1,6 +1,7 @@
 package org.monostudio.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.bucket4j.Bucket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
@@ -11,6 +12,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.monostudio.api.models.PersonPojo;
 import org.monostudio.common.exceptions.BadInputException;
+import org.monostudio.config.RateLimitConfig;
 import org.monostudio.config.SecurityProperties;
 import org.monostudio.jpa.services.crud.CustomersCrudService;
 
@@ -26,17 +28,20 @@ public class JwtGuestAuthenticationFilter
     private final AuthenticationManager authenticationManager;
     private final CustomersCrudService customersService;
     private final SecurityProperties securityProperties;
+    private final RateLimitConfig rateLimitConfig;
 
     public JwtGuestAuthenticationFilter(
         SecurityProperties securityProperties,
         SecretKey secretKey,
         AuthenticationManager authenticationManager,
-        CustomersCrudService customersService
+        CustomersCrudService customersService,
+        RateLimitConfig rateLimitConfig
     ) {
         super(securityProperties, secretKey);
         this.securityProperties = securityProperties;
         this.authenticationManager = authenticationManager;
         this.customersService = customersService;
+        this.rateLimitConfig = rateLimitConfig;
     }
 
     @Override
@@ -45,6 +50,19 @@ public class JwtGuestAuthenticationFilter
         if (!HttpMethod.POST.matches(request.getMethod())) {
             return null;
         } else {
+            String clientIp = getClientIp(request);
+            Bucket bucket = rateLimitConfig.guestBucketFor(clientIp);
+            if (!bucket.tryConsume(1)) {
+                response.setStatus(429);
+                response.setContentType("application/json");
+                try {
+                    response.getWriter().write(
+                        "{\"code\":\"RATE_01\",\"message\":\"Too many guest registration attempts. Please wait before trying again.\",\"canRetry\":true}");
+                } catch (IOException e) {
+                    // ignore
+                }
+                return null;
+            }
             try {
                 PersonPojo guestCustomerData = new ObjectMapper().readValue(request.getInputStream(), PersonPojo.class);
                 this.saveCustomerData(guestCustomerData);
@@ -65,5 +83,17 @@ public class JwtGuestAuthenticationFilter
         } catch (EntityExistsException e) {
             myLogger.info("Guest with idNumber={} is already registered in the database", guestData.getIdNumber());
         }
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        String xRealIp = request.getHeader("X-Real-IP");
+        if (xRealIp != null && !xRealIp.isEmpty()) {
+            return xRealIp;
+        }
+        return request.getRemoteAddr();
     }
 }

@@ -170,6 +170,17 @@ public abstract class CrudGenericService<M, E extends DBEntity>
     }
 
     /**
+     * @throws EntityNotFoundException When no entity matches the given id.
+     */
+    @Override
+    public void delete(Long id) throws EntityNotFoundException {
+        if (!repository.existsById(id)) {
+            throw new EntityNotFoundException(ITEM_NOT_FOUND);
+        }
+        repository.deleteById(id);
+    }
+
+    /**
      * @throws EntityNotFoundException When no entity matches the given filtering conditions.
      */
     @Override
@@ -181,6 +192,21 @@ public abstract class CrudGenericService<M, E extends DBEntity>
         }
         E found = entity.get();
         return converter.convertToPojo(found);
+    }
+
+    /**
+     * Retrieves an entity by its id.
+     *
+     * @param id The entity id
+     * @return The model representing the entity
+     * @throws EntityNotFoundException When no entity matches the given id.
+     */
+    public M findById(Long id) throws EntityNotFoundException {
+        Optional<E> entity = repository.findById(id);
+        if (entity.isEmpty()) {
+            throw new EntityNotFoundException(ITEM_NOT_FOUND);
+        }
+        return converter.convertToPojo(entity.get());
     }
 
     protected E flushPartialChanges(Map<String, Object> changes, E existingEntity) throws BadInputException {

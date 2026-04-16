@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,7 +28,6 @@ import org.monostudio.jpa.sortspecs.UserRolesSortSpec;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
-import jakarta.validation.Valid;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.CREATED;
@@ -69,23 +69,23 @@ public class DataUserRolesController
     }
 
     @Override
-    @PutMapping
+    @PutMapping("/{id}")
     @Operation(summary = "Replace user roles data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('user_roles:update')")
-    public void update( UserRolePojo input, @RequestParam Map<String, String> requestParams)
+    public void update(UserRolePojo input, @PathVariable Long id)
         throws BadInputException, EntityNotFoundException {
-        super.update(input, requestParams);
+        crudService.update(input, id);
     }
 
     @Override
-    @DeleteMapping
+    @DeleteMapping("/{id}")
     @Operation(summary = "Remove user roles.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('user_roles:delete')")
-    public void delete(@RequestParam Map<String, String> requestParams)
+    public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
-        super.delete(requestParams);
+        crudService.delete(id);
     }
 
     @Override

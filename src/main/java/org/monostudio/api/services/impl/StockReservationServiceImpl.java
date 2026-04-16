@@ -93,8 +93,10 @@ public class StockReservationServiceImpl
     // ─── Private helpers ─────────────────────────────────────────────────────────
 
     private ProductVariant findVariantBySku(String sku) throws BadInputException {
-        return productVariantsRepository.findBySku(sku)
+        ProductVariant variant = productVariantsRepository.findBySku(sku)
             .orElseThrow(() -> new BadInputException("Variant not found with SKU: " + sku));
+        return productVariantsRepository.findByIdWithLock(variant.getId())
+            .orElseThrow(() -> new BadInputException("Variant not found with ID: " + variant.getId()));
     }
 
     private StockReservationPojo toPojo(StockReservation reservation) {

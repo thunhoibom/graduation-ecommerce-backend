@@ -26,8 +26,15 @@ public class SortSpecParserServiceImpl
         }
         String propertyName = queryMap.get(SORT_PROPERTY_QUERY_MAP_KEY);
         OrderSpecifier<?> orderSpecifier = orderSpecMap.get(propertyName);
+        if (orderSpecifier == null) {
+            return Sort.unsorted();
+        }
         Sort sortBy = QSort.by(orderSpecifier);
-        switch (queryMap.get(SORT_DIRECTION_QUERY_MAP_KEY)) {
+        String direction = queryMap.get(SORT_DIRECTION_QUERY_MAP_KEY);
+        if (direction == null) {
+            return sortBy;
+        }
+        switch (direction) {
             case "asc":
                 return sortBy.ascending();
             case "desc":

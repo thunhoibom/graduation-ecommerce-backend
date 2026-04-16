@@ -20,6 +20,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
@@ -103,6 +104,10 @@ public class ProductVariant
     @Column(name = "variant_stock_reserved", nullable = false)
     @Builder.Default
     private int stockReserved = 0;
+
+    @Version
+    @Column(name = "variant_version")
+    private Long version;
 
     /**
      * Whether this variant is active and available for purchase.

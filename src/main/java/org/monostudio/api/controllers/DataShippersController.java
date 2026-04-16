@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,7 +29,6 @@ import org.monostudio.jpa.sortspecs.ShippersSortSpec;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
-import jakarta.validation.Valid;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.CREATED;
@@ -68,35 +68,36 @@ public class DataShippersController
     }
 
     @Override
-    @PutMapping
+    @PutMapping("/{id}")
     @Operation(summary = "Replace shippers data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('shippers:update')")
-    public void update( ShipperPojo input, @RequestParam Map<String, String> requestParams)
+    public void update(ShipperPojo input, @PathVariable Long id)
         throws BadInputException, EntityNotFoundException {
-        super.update(input, requestParams);
+        crudService.update(input, id);
     }
 
     @Override
-    @PatchMapping
+    @PatchMapping("/{id}")
     @Operation(summary = "Update parts of shippers data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('shippers:update')")
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
-        @RequestParam Map<String, String> requestParams
+        @PathVariable Long id
     ) throws BadInputException, EntityNotFoundException {
-        super.partialUpdate(input, requestParams);
+        crudService.partialUpdate(input, id)
+            .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
     @Override
-    @DeleteMapping
+    @DeleteMapping("/{id}")
     @Operation(summary = "Remove shippers.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('shippers:delete')")
-    public void delete(@RequestParam Map<String, String> requestParams)
+    public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
-        super.delete(requestParams);
+        crudService.delete(id);
     }
 
     @Override

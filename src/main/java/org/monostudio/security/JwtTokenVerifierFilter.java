@@ -1,6 +1,7 @@
 package org.monostudio.security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,12 +78,15 @@ public class JwtTokenVerifierFilter
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
                 filterChain.doFilter(request, response);
-            } catch (NullPointerException | IllegalStateException exc) {
-                myLogger.info("Access denied: '{}' '{}' used an invalid token '{}'",
+            } catch (JwtException | NullPointerException | IllegalStateException exc) {
+                myLogger.info("Access denied: '{}' '{}' used an invalid token '{}': {}",
                     request.getMethod(),
                     request.getRequestURI(),
-                    jwt);
+                    jwt,
+                    exc.getMessage());
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json");
+                response.getWriter().write("{\"code\":\"AUTH_01\",\"message\":\"Invalid or expired token\",\"canRetry\":true}");
             }
         }
     }

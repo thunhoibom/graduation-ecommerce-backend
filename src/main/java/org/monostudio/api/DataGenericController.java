@@ -2,8 +2,11 @@ package org.monostudio.api;
 
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Predicate;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Sort;
 import org.springframework.lang.Nullable;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.monostudio.api.models.DataPagePojo;
 import org.monostudio.api.services.PaginationService;
@@ -65,5 +68,18 @@ public abstract class DataGenericController<M, E>
         }
 
         return crudService.readMany(pageIndex, pageSize, order, filters);
+    }
+
+    /**
+     * Retrieve a single item by its id.
+     *
+     * @param id The id of the item to retrieve.
+     * @return The item.
+     * @throws EntityNotFoundException When no item matches the given id.
+     */
+    @Override
+    @GetMapping("/{id}")
+    public M getById(@PathVariable Long id) throws EntityNotFoundException {
+        return crudService.findById(id);
     }
 }

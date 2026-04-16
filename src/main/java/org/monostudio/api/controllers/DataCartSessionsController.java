@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -54,34 +55,35 @@ public class DataCartSessionsController
     }
 
     /**
-     * PATCH /data/cart-sessions — Admin can refresh cart expiry (extend TTL).
+     * PATCH /data/cart-sessions/{id} — Admin can refresh cart expiry (extend TTL).
      * Body: { "refreshExpiry": true, "expiresAt": "2026-04-04T00:00:00" }
      */
     @Override
-    @PatchMapping
+    @PatchMapping("/{id}")
     @Operation(summary = "Refresh cart expiry / extend TTL.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('cartSessions:update')")
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
-        @RequestParam Map<String, String> requestParams
+        @PathVariable Long id
     ) throws BadInputException, EntityNotFoundException {
-        super.partialUpdate(input, requestParams);
+        crudService.partialUpdate(input, id)
+            .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
     /**
-     * DELETE /data/cart-sessions — Admin can force-clear a cart.
+     * DELETE /data/cart-sessions/{id} — Admin can force-clear a cart.
      * WARNING: This does NOT release stock reservations.
      * Use DELETE /public/cart/reservations?sessionId=xxx first.
      */
     @Override
-    @DeleteMapping
+    @DeleteMapping("/{id}")
     @Operation(summary = "Delete cart sessions (admin). Does NOT release stock reservations.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('cartSessions:delete')")
-    public void delete(@RequestParam Map<String, String> requestParams)
+    public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
-        super.delete(requestParams);
+        crudService.delete(id);
     }
 
     @Override

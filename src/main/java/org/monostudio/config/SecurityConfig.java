@@ -28,6 +28,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import javax.crypto.SecretKey;
 
+import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.http.HttpMethod;
@@ -42,6 +43,7 @@ public class SecurityConfig {
     private final AuthorizationHeaderParserService<Claims> jwtClaimsParserService;
     private final CustomersCrudService customersService;
     private final CorsProperties corsProperties;
+    private final RateLimitConfig rateLimitConfig;
     private AuthenticationManager authenticationManager;
 
     @Autowired
@@ -50,13 +52,15 @@ public class SecurityConfig {
                           SecurityProperties securityProperties,
                           AuthorizationHeaderParserService<Claims> jwtClaimsParserService,
                           CustomersCrudService customersService,
-                          CorsProperties corsProperties) {
+                          CorsProperties corsProperties,
+                          RateLimitConfig rateLimitConfig) {
         this.userDetailsService = userDetailsService;
         this.secretKey = secretKey;
         this.securityProperties = securityProperties;
         this.jwtClaimsParserService = jwtClaimsParserService;
         this.customersService = customersService;
         this.corsProperties = corsProperties;
+        this.rateLimitConfig = rateLimitConfig;
     }
 
     @Bean
@@ -67,6 +71,8 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(configure -> configure.sessionCreationPolicy(STATELESS))
             .authorizeHttpRequests(configure -> configure
+                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                .requestMatchers("/actuator/info").permitAll()
                 .requestMatchers("/api/public/cart", "/api/public/cart/**").permitAll()
                 .requestMatchers("/api/public/discount/**").permitAll()
                 .requestMatchers("/api/public/shipping/**").permitAll()
@@ -75,6 +81,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/data/products", "/api/data/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/data/product_categories", "/api/data/product_categories/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/data/images/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/data/product-variants", "/api/data/product-variants/**").permitAll()
                 .requestMatchers("/api/public/auth/register").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 .anyRequest().authenticated())
@@ -111,7 +118,8 @@ public class SecurityConfig {
         JwtLoginAuthenticationFilter filter = new JwtLoginAuthenticationFilter(
             securityProperties,
             secretKey,
-            authenticationManager);
+            authenticationManager,
+            rateLimitConfig);
         filter.setFilterProcessesUrl(url);
         return filter;
     }
@@ -121,7 +129,8 @@ public class SecurityConfig {
             securityProperties,
             secretKey,
             authenticationManager,
-            customersService);
+            customersService,
+            rateLimitConfig);
         filter.setFilterProcessesUrl(url);
         return filter;
     }
@@ -130,13 +139,11 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        config.setAllowedOrigins(List.of(
-            "http://localhost:3000",
-            "https://localhost:3000",
-            "http://127.0.0.1:3000",
-            "https://127.0.0.1:3000"
-        ));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        List<String> allowedOrigins = Arrays.asList(
+            corsProperties.getAllowedOrigins().split(corsProperties.getListDelimiter())
+        );
+        config.setAllowedOrigins(allowedOrigins);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 

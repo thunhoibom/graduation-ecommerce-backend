@@ -31,7 +31,6 @@ import org.monostudio.jpa.sortspecs.ReturnRequestsSortSpec;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
-import jakarta.validation.Valid;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,35 +93,36 @@ public class DataReturnRequestsController
     }
 
     @Override
-    @PutMapping
+    @PutMapping("/{id}")
     @Operation(summary = "Replace return request data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('returnRequests:update')")
-    public void update( ReturnRequestPojo input, @RequestParam Map<String, String> requestParams)
+    public void update(ReturnRequestPojo input, @PathVariable Long id)
         throws BadInputException, EntityNotFoundException {
-        super.update(input, requestParams);
+        crudService.update(input, id);
     }
 
     @Override
-    @PatchMapping
+    @PatchMapping("/{id}")
     @Operation(summary = "Update parts of return request data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('returnRequests:update')")
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
-        @RequestParam Map<String, String> requestParams
+        @PathVariable Long id
     ) throws BadInputException, EntityNotFoundException {
-        super.partialUpdate(input, requestParams);
+        crudService.partialUpdate(input, id)
+            .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
     @Override
-    @DeleteMapping
+    @DeleteMapping("/{id}")
     @Operation(summary = "Remove return requests.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('returnRequests:delete')")
-    public void delete(@RequestParam Map<String, String> requestParams)
+    public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
-        super.delete(requestParams);
+        crudService.delete(id);
     }
 
     @PostMapping("/approve/{id}")

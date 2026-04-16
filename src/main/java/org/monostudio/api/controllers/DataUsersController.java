@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,8 +28,6 @@ import org.monostudio.jpa.sortspecs.UsersSortSpec;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
-import jakarta.validation.Valid;
-import java.security.Principal;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.CREATED;
@@ -70,25 +69,23 @@ public class DataUsersController
     }
 
     @Override
-    @PutMapping
+    @PutMapping("/{id}")
     @Operation(summary = "Replace users data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('users:update')")
-    public void update( UserPojo input, @RequestParam Map<String, String> requestParams)
+    public void update(UserPojo input, @PathVariable Long id)
         throws BadInputException, EntityNotFoundException {
-        super.update(input, requestParams);
+        crudService.update(input, id);
     }
 
-    @DeleteMapping
+    @Override
+    @DeleteMapping("/{id}")
     @Operation(summary = "Remove users.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('users:delete')")
-    public void delete(Principal principal, @RequestParam Map<String, String> requestParams)
-        throws EntityNotFoundException, BadInputException {
-        if (requestParams.containsKey("name") && requestParams.get("name").equals(principal.getName())) {
-            throw new BadInputException("A user should not be able to delete their own account");
-        }
-        super.delete(requestParams);
+    public void delete(@PathVariable Long id)
+        throws EntityNotFoundException {
+        crudService.delete(id);
     }
 
     @Override

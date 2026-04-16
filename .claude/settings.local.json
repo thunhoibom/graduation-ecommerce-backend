@@ -6,7 +6,8 @@
       "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/graduation-ecommerce-backend -name pom.xml -exec cat {})",
       "Bash(2)",
       "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/commerce/src -type f \\\\\\(-name *.ts -o -name *.tsx -o -name *.js -o -name *.json \\\\\\))",
-      "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/commerce -name api-instance* -o -name *.env*)"
+      "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/commerce -name api-instance* -o -name *.env*)",
+      "Bash(mvn compile:*)"
     ]
   }
 }
