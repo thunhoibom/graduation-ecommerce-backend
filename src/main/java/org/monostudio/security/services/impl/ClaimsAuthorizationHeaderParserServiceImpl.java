@@ -27,10 +27,10 @@ public class ClaimsAuthorizationHeaderParserServiceImpl
     @Override
     public Claims parseToken(String token) throws IllegalStateException {
         try {
-            Jws<Claims> claimsJws = Jwts.parserBuilder()
-                .setSigningKey(secretKey)
+            Jws<Claims> claimsJws = Jwts.parser()
+                .verifyWith(secretKey)
                 .build()
-                .parseClaimsJws(token);
+                .parseSignedClaims(token);
 
             return claimsJws.getBody();
         } catch (JwtException e) {

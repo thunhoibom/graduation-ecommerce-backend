@@ -7,7 +7,21 @@
       "Bash(2)",
       "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/commerce/src -type f \\\\\\(-name *.ts -o -name *.tsx -o -name *.js -o -name *.json \\\\\\))",
       "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/commerce -name api-instance* -o -name *.env*)",
-      "Bash(mvn compile:*)"
+      "Bash(mvn compile:*)",
+      "Bash(java -version)",
+      "Bash(mvn -version)",
+      "Bash(dir \"C:\\\\Program Files\\\\Java\")",
+      "Bash(dir \"C:\\\\Program Files\\\\Eclipse Adoptium\")",
+      "Bash(where java:*)",
+      "Bash(set JAVA_HOME=C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-17)",
+      "Bash(set JAVA_HOME=C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-21.0.10)",
+      "Bash(mvn clean:*)",
+      "Bash(findstr /i \"error success\")",
+      "Bash(where mvn:*)",
+      "Bash(set PATH=C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-21.0.10\\\\bin)",
+      "Bash(%PATH%)",
+      "Read(//d D:/GRADUATION_PROJECT/graduation_ecommerce/**)",
+      "WebSearch"
     ]
   }
 }

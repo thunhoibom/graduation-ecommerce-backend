@@ -20,9 +20,9 @@ public class PersonPojo {
     private String firstName;
     @NotBlank
     private String lastName;
-    @NotBlank
     private String idNumber;
     @NotBlank
+    @jakarta.validation.constraints.Email(message = "Invalid email format")
     private String email;
     // @Pattern(regexp = "^(((\\(\\+?[0-9]{3}\\))|(\\+?[0-9]{3})) ?)?[0-9]{3,4}[ -]?[0-9]{4}$")
     private String phone1;

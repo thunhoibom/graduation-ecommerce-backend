@@ -68,7 +68,6 @@ public class DataDiscountCodesController
         crudService.create(input);
     }
 
-    @Override
     @PutMapping("/{id}")
     @Operation(summary = "Replace discount code data.")
     @ResponseStatus(NO_CONTENT)
@@ -78,7 +77,6 @@ public class DataDiscountCodesController
         crudService.update(input, id);
     }
 
-    @Override
     @PatchMapping("/{id}")
     @Operation(summary = "Update parts of discount code data.")
     @ResponseStatus(NO_CONTENT)
@@ -91,7 +89,6 @@ public class DataDiscountCodesController
             .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
-    @Override
     @DeleteMapping("/{id}")
     @Operation(summary = "Remove discount codes.")
     @ResponseStatus(NO_CONTENT)

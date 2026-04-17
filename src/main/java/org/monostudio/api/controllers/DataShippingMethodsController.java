@@ -67,7 +67,6 @@ public class DataShippingMethodsController
         crudService.create(input);
     }
 
-    @Override
     @PutMapping("/{id}")
     @Operation(summary = "Replace shipping methods data.")
     @ResponseStatus(NO_CONTENT)
@@ -77,7 +76,6 @@ public class DataShippingMethodsController
         crudService.update(input, id);
     }
 
-    @Override
     @PatchMapping("/{id}")
     @Operation(summary = "Update parts of shipping methods data.")
     @ResponseStatus(NO_CONTENT)
@@ -90,7 +88,6 @@ public class DataShippingMethodsController
             .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
-    @Override
     @DeleteMapping("/{id}")
     @Operation(summary = "Remove shipping methods.")
     @ResponseStatus(NO_CONTENT)

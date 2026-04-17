@@ -29,9 +29,9 @@ public class RateLimitConfig {
      * 5 requests per minute per IP.
      */
     public Bucket loginBucketFor(String ip) {
-        return loginBuckets.computeIfAbsent(ip, k -> new Bucket(
-            Bandwidth.classic(5, Refill.intervalls(5, ONE_MINUTE))
-        ));
+        return loginBuckets.computeIfAbsent(ip, k -> Bucket.builder()
+            .addLimit(Bandwidth.classic(5, Refill.intervally(5, ONE_MINUTE)))
+            .build());
     }
 
     /**
@@ -39,9 +39,9 @@ public class RateLimitConfig {
      * 3 requests per minute per IP.
      */
     public Bucket guestBucketFor(String ip) {
-        return guestBuckets.computeIfAbsent(ip, k -> new Bucket(
-            Bandwidth.classic(3, Refill.intervalls(3, ONE_MINUTE))
-        ));
+        return guestBuckets.computeIfAbsent(ip, k -> Bucket.builder()
+            .addLimit(Bandwidth.classic(3, Refill.intervally(3, ONE_MINUTE)))
+            .build());
     }
 
     /**
@@ -49,8 +49,8 @@ public class RateLimitConfig {
      * 10 requests per minute per session token.
      */
     public Bucket checkoutBucketFor(String sessionToken) {
-        return checkoutBuckets.computeIfAbsent(sessionToken, k -> new Bucket(
-            Bandwidth.classic(10, Refill.intervalls(10, ONE_MINUTE))
-        ));
+        return checkoutBuckets.computeIfAbsent(sessionToken, k -> Bucket.builder()
+            .addLimit(Bandwidth.classic(10, Refill.intervally(10, ONE_MINUTE)))
+            .build());
     }
 }

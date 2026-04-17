@@ -10,9 +10,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.monostudio.jpa.repositories.GuestSessionsRepository;
 import org.monostudio.security.services.AuthorizationHeaderParserService;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,16 +31,21 @@ import java.util.Set;
 import static org.monostudio.config.Constants.JWT_CLAIM_AUTHORITIES;
 import static org.monostudio.config.Constants.JWT_PREFIX;
 
+@Component
 public class JwtTokenVerifierFilter
     extends OncePerRequestFilter {
     private final Logger myLogger = LoggerFactory.getLogger(JwtTokenVerifierFilter.class);
     private final AuthorizationHeaderParserService<Claims> jwtClaimsParserService;
+    private final GuestSessionsRepository guestSessionsRepository;
 
+    @Autowired
     public JwtTokenVerifierFilter(
-        AuthorizationHeaderParserService<Claims> jwtClaimsParserService
+        AuthorizationHeaderParserService<Claims> jwtClaimsParserService,
+        GuestSessionsRepository guestSessionsRepository
     ) {
         super();
         this.jwtClaimsParserService = jwtClaimsParserService;
+        this.guestSessionsRepository = guestSessionsRepository;
     }
 
     private Set<SimpleGrantedAuthority> extractAuthorities(Claims tokenBody) {
@@ -49,6 +57,20 @@ public class JwtTokenVerifierFilter
             authorities.add(authority);
         }
         return authorities;
+    }
+
+    /**
+     * Checks if a guest session UUID has been revoked.
+     * Returns true (allow) if not a guest UUID, or if guest session is valid.
+     * Returns false (deny) if guest session is revoked or expired.
+     */
+    private boolean isGuestSessionValid(String subject) {
+        if (subject == null || subject.length() != 36 || !subject.contains("-")) {
+            return true; // Not a guest session UUID — allow through
+        }
+        return guestSessionsRepository.findBySessionUuid(subject)
+            .map(session -> !session.isRevoked() && !session.isExpired())
+            .orElse(true); // Unknown session — let it fail on expiry check instead
     }
 
     @Override
@@ -69,6 +91,14 @@ public class JwtTokenVerifierFilter
                 Instant now = Instant.now();
                 if (expiration.isAfter(now)) {
                     String username = tokenBody.getSubject();
+                    // Revocation check for guest session UUIDs
+                    if (!isGuestSessionValid(username)) {
+                        myLogger.info("Access denied: guest session '{}' is revoked or expired", username);
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        response.setContentType("application/json");
+                        response.getWriter().write("{\"code\":\"AUTH_02\",\"message\":\"Session revoked. Please start a new session.\",\"canRetry\":true}");
+                        return;
+                    }
                     Set<SimpleGrantedAuthority> authorities = this.extractAuthorities(tokenBody);
                     Authentication authentication = new UsernamePasswordAuthenticationToken(
                         username,

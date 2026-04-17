@@ -11,4 +11,7 @@ public interface PeopleRepository
 
     Optional<Person> findByIdNumber(String idNumber);
 
+    Optional<Person> findByEmail(String email);
+
+    boolean existsByEmail(String email);
 }

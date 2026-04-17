@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.monostudio.config.SecurityProperties;
 import org.monostudio.jpa.entities.Permission;
 import org.monostudio.jpa.entities.User;
+import org.monostudio.jpa.repositories.GuestSessionsRepository;
 import org.monostudio.jpa.repositories.UserRolePermissionsRepository;
 import org.monostudio.jpa.repositories.UsersRepository;
 import org.monostudio.security.services.UserPermissionsService;
@@ -24,6 +25,7 @@ import java.util.stream.Collectors;
 public class UserDetailsServiceImpl
     implements UserDetailsService {
     private final UsersRepository usersRepository;
+    private final GuestSessionsRepository guestSessionsRepository;
     private final UserRolePermissionsRepository rolePermissionsRepository;
     private final UserPermissionsService userPermissionsService;
     private final SecurityProperties securityProperties;
@@ -31,11 +33,13 @@ public class UserDetailsServiceImpl
     @Autowired
     public UserDetailsServiceImpl(
         UsersRepository usersRepository,
+        GuestSessionsRepository guestSessionsRepository,
         UserRolePermissionsRepository rolePermissionsRepository,
         UserPermissionsService userPermissionsService,
         SecurityProperties securityProperties
     ) {
         this.usersRepository = usersRepository;
+        this.guestSessionsRepository = guestSessionsRepository;
         this.rolePermissionsRepository = rolePermissionsRepository;
         this.userPermissionsService = userPermissionsService;
         this.securityProperties = securityProperties;
@@ -43,9 +47,13 @@ public class UserDetailsServiceImpl
 
     @Override
     public UserDetailsPojo loadUserByUsername(String username) throws UsernameNotFoundException {
+        // Check if this is a guest session UUID (36-char UUID format with hyphens)
+        if (username != null && username.length() == 36 && username.contains("-")) {
+            return this.loadGuestSessionDetails(username);
+        }
         if (securityProperties.isGuestUserEnabled() &&
             username.equals(securityProperties.getGuestUserName())) {
-            return this.loadGuestUserDetails();
+            return this.loadLegacyGuestUserDetails();
         }
         Optional<User> foundUser = usersRepository.findByNameWithRole(username);
         if (foundUser.isPresent()) {
@@ -72,7 +80,29 @@ public class UserDetailsServiceImpl
             .build();
     }
 
-    private UserDetailsPojo loadGuestUserDetails() {
+    private UserDetailsPojo loadGuestSessionDetails(String sessionUuid) {
+        Optional<org.monostudio.jpa.entities.GuestSession> session =
+            guestSessionsRepository.findBySessionUuid(sessionUuid);
+        if (session.isEmpty() || !session.get().isValid()) {
+            throw new UsernameNotFoundException("Guest session not found or expired");
+        }
+        long guestUserRoleId = securityProperties.getGuestUserRoleId();
+        List<SimpleGrantedAuthority> authorities =
+            rolePermissionsRepository.deepFindPermissionsByUserRoleId(guestUserRoleId).stream()
+                .map(rp -> new SimpleGrantedAuthority(rp.getPermission().getCode()))
+                .collect(Collectors.toList());
+        return UserDetailsPojo.builder()
+            .accountNonExpired(true)
+            .accountNonLocked(true)
+            .credentialsNonExpired(true)
+            .enabled(true)
+            .authorities(authorities)
+            .username(sessionUuid)
+            .password("")
+            .build();
+    }
+
+    private UserDetailsPojo loadLegacyGuestUserDetails() {
         long guestUserRoleId = securityProperties.getGuestUserRoleId();
         List<SimpleGrantedAuthority> authorities = rolePermissionsRepository.deepFindPermissionsByUserRoleId(guestUserRoleId).stream()
             .map(rolePermission -> new SimpleGrantedAuthority(rolePermission.getPermission().getCode()))

@@ -68,7 +68,6 @@ public class DataUsersController
         crudService.create(input);
     }
 
-    @Override
     @PutMapping("/{id}")
     @Operation(summary = "Replace users data.")
     @ResponseStatus(NO_CONTENT)
@@ -78,7 +77,6 @@ public class DataUsersController
         crudService.update(input, id);
     }
 
-    @Override
     @DeleteMapping("/{id}")
     @Operation(summary = "Remove users.")
     @ResponseStatus(NO_CONTENT)

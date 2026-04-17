@@ -70,7 +70,6 @@ public class DataImagesController
         crudService.create(input);
     }
 
-    @Override
     @PutMapping("/{id}")
     @Operation(summary = "Replace image links data.")
     @ResponseStatus(NO_CONTENT)
@@ -80,7 +79,6 @@ public class DataImagesController
         crudService.update(input, id);
     }
 
-    @Override
     @PatchMapping("/{id}")
     @Operation(summary = "Update parts of image links data.")
     @ResponseStatus(NO_CONTENT)
@@ -93,7 +91,6 @@ public class DataImagesController
             .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
-    @Override
     @DeleteMapping("/{id}")
     @Operation(summary = "Remove image links.")
     @ResponseStatus(NO_CONTENT)

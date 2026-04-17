@@ -58,7 +58,6 @@ public class DataCartSessionsController
      * PATCH /data/cart-sessions/{id} — Admin can refresh cart expiry (extend TTL).
      * Body: { "refreshExpiry": true, "expiresAt": "2026-04-04T00:00:00" }
      */
-    @Override
     @PatchMapping("/{id}")
     @Operation(summary = "Refresh cart expiry / extend TTL.")
     @ResponseStatus(NO_CONTENT)
@@ -76,7 +75,6 @@ public class DataCartSessionsController
      * WARNING: This does NOT release stock reservations.
      * Use DELETE /public/cart/reservations?sessionId=xxx first.
      */
-    @Override
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete cart sessions (admin). Does NOT release stock reservations.")
     @ResponseStatus(NO_CONTENT)

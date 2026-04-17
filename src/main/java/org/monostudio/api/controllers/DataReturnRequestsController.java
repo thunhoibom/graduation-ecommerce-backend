@@ -92,7 +92,6 @@ public class DataReturnRequestsController
         crudService.create(input);
     }
 
-    @Override
     @PutMapping("/{id}")
     @Operation(summary = "Replace return request data.")
     @ResponseStatus(NO_CONTENT)
@@ -102,7 +101,6 @@ public class DataReturnRequestsController
         crudService.update(input, id);
     }
 
-    @Override
     @PatchMapping("/{id}")
     @Operation(summary = "Update parts of return request data.")
     @ResponseStatus(NO_CONTENT)
@@ -115,7 +113,6 @@ public class DataReturnRequestsController
             .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
-    @Override
     @DeleteMapping("/{id}")
     @Operation(summary = "Remove return requests.")
     @ResponseStatus(NO_CONTENT)

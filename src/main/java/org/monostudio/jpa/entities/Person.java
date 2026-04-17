@@ -49,7 +49,7 @@ public class Person
     @Column(name = "person_last_name", nullable = false)
     private String lastName;
     @Size(min = 1, max = 20)
-    @Column(name = "person_id_number", nullable = false, unique = true)
+    @Column(name = "person_id_number", nullable = true, unique = false)
     private String idNumber;
     @Size(min = 5, max = 100)
     @Column(name = "person_email", nullable = false)

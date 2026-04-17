@@ -104,7 +104,6 @@ public class DataProductCategoriesController
         crudService.create(input);
     }
 
-    @Override
     @PutMapping("/{id}")
     @Operation(summary = "Replace product categories data.")
     @ResponseStatus(NO_CONTENT)
@@ -114,7 +113,6 @@ public class DataProductCategoriesController
         crudService.update(input, id);
     }
 
-    @Override
     @PatchMapping("/{id}")
     @Operation(summary = "Update parts of product categories data.")
     @ResponseStatus(NO_CONTENT)
@@ -127,7 +125,6 @@ public class DataProductCategoriesController
             .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
-    @Override
     @DeleteMapping("/{id}")
     @Operation(summary = "Remove product categories.")
     @ResponseStatus(NO_CONTENT)

@@ -101,7 +101,6 @@ public class DataOrdersController
         crudService.create(input);
     }
 
-    @Override
     @PutMapping("/{id}")
     @Operation(summary = "Replace orders data.")
     @ResponseStatus(NO_CONTENT)
@@ -111,7 +110,6 @@ public class DataOrdersController
         crudService.update(input, id);
     }
 
-    @Override
     @PatchMapping("/{id}")
     @Operation(summary = "Update parts of orders data.")
     @ResponseStatus(NO_CONTENT)
@@ -124,7 +122,6 @@ public class DataOrdersController
             .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
     }
 
-    @Override
     @DeleteMapping("/{id}")
     @Operation(summary = "Remove orders.")
     @ResponseStatus(NO_CONTENT)

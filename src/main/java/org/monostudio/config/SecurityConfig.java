@@ -19,7 +19,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
-import org.monostudio.jpa.services.crud.CustomersCrudService;
+import org.monostudio.jpa.repositories.GuestSessionsRepository;
 import org.monostudio.security.JwtGuestAuthenticationFilter;
 import org.monostudio.security.JwtLoginAuthenticationFilter;
 import org.monostudio.security.JwtTokenVerifierFilter;
@@ -41,7 +41,7 @@ public class SecurityConfig {
     private final SecretKey secretKey;
     private final SecurityProperties securityProperties;
     private final AuthorizationHeaderParserService<Claims> jwtClaimsParserService;
-    private final CustomersCrudService customersService;
+    private final GuestSessionsRepository guestSessionsRepository;
     private final CorsProperties corsProperties;
     private final RateLimitConfig rateLimitConfig;
     private AuthenticationManager authenticationManager;
@@ -51,14 +51,14 @@ public class SecurityConfig {
                           SecretKey secretKey,
                           SecurityProperties securityProperties,
                           AuthorizationHeaderParserService<Claims> jwtClaimsParserService,
-                          CustomersCrudService customersService,
+                          GuestSessionsRepository guestSessionsRepository,
                           CorsProperties corsProperties,
                           RateLimitConfig rateLimitConfig) {
         this.userDetailsService = userDetailsService;
         this.secretKey = secretKey;
         this.securityProperties = securityProperties;
         this.jwtClaimsParserService = jwtClaimsParserService;
-        this.customersService = customersService;
+        this.guestSessionsRepository = guestSessionsRepository;
         this.corsProperties = corsProperties;
         this.rateLimitConfig = rateLimitConfig;
     }
@@ -88,7 +88,7 @@ public class SecurityConfig {
             .addFilter(this.loginFilterForUrl("/api/public/auth/login"))
             .addFilterAfter(this.guestFilterForUrl("/api/public/guest"),
                             JwtLoginAuthenticationFilter.class)
-            .addFilterAfter(new JwtTokenVerifierFilter(jwtClaimsParserService),
+            .addFilterAfter(new JwtTokenVerifierFilter(jwtClaimsParserService, guestSessionsRepository),
                             JwtGuestAuthenticationFilter.class)
             .cors(corsConfigurer -> corsConfigurer.configurationSource(corsConfigurationSource()))
             .build();
@@ -129,7 +129,7 @@ public class SecurityConfig {
             securityProperties,
             secretKey,
             authenticationManager,
-            customersService,
+            guestSessionsRepository,
             rateLimitConfig);
         filter.setFilterProcessesUrl(url);
         return filter;

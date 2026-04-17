@@ -68,7 +68,6 @@ public class DataUserRolesController
         crudService.create(input);
     }
 
-    @Override
     @PutMapping("/{id}")
     @Operation(summary = "Replace user roles data.")
     @ResponseStatus(NO_CONTENT)
@@ -78,7 +77,6 @@ public class DataUserRolesController
         crudService.update(input, id);
     }
 
-    @Override
     @DeleteMapping("/{id}")
     @Operation(summary = "Remove user roles.")
     @ResponseStatus(NO_CONTENT)

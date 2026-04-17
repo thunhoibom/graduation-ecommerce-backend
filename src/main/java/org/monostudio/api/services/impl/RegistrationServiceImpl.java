@@ -63,19 +63,29 @@ public class RegistrationServiceImpl
         }
 
         PersonPojo sourcePerson = registration.getProfile();
-        Person newPerson = peopleConverterService.convertToNewEntity(sourcePerson);
 
-        Predicate sameProfileData = QPerson.person.idNumber.eq(sourcePerson.getIdNumber());
-        if (peopleRepository.exists(sameProfileData)) {
-            throw new EntityExistsException("That ID number is already registered and associated to an account.");
-        } else {
-            newPerson = peopleRepository.saveAndFlush(newPerson);
+        // Check email uniqueness — required for account recovery
+        String email = sourcePerson.getEmail();
+        if (email != null && peopleRepository.findByEmail(email).isPresent()) {
+            throw new EntityExistsException("An account with this email already exists.");
         }
+
+        // Check idNumber only if provided (optional for guest-to-registered upgrade)
+        String idNumber = sourcePerson.getIdNumber();
+        if (idNumber != null && !idNumber.isBlank()) {
+            Predicate sameIdNumber = QPerson.person.idNumber.eq(idNumber);
+            if (peopleRepository.exists(sameIdNumber)) {
+                throw new EntityExistsException("That ID number is already registered and associated to an account.");
+            }
+        }
+
+        Person newPerson = peopleConverterService.convertToNewEntity(sourcePerson);
+        newPerson = peopleRepository.saveAndFlush(newPerson);
 
         User newUser = this.convertToUser(registration);
         newUser.setPerson(newPerson);
         usersRepository.saveAndFlush(newUser);
-        logger.info("New user created with name '{}' and idNumber '{}'", newUser.getName(), newPerson.getIdNumber());
+        // Credential info not logged — security best practice
 
         Customer newCustomer = Customer.builder()
             .person(newPerson)
