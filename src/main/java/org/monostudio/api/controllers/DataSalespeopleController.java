@@ -86,6 +86,18 @@ public class DataSalespeopleController
         crudService.delete(id);
     }
 
+    @PatchMapping("/{id}")
+    @Operation(summary = "Partial update of salespeople.")
+    @ResponseStatus(NO_CONTENT)
+    @PreAuthorize("hasAuthority('salespeople:update')")
+    public void partialUpdate(
+        @RequestBody Map<String, Object> input,
+        @PathVariable Long id
+    ) throws BadInputException, EntityNotFoundException {
+        crudService.partialUpdate(input, id)
+            .orElseThrow(() -> new EntityNotFoundException("Salesperson not found: " + id));
+    }
+
     @Override
     protected Map<String, OrderSpecifier<?>> getOrderSpecMap() {
         return SalespeopleSortSpec.ORDER_SPEC_MAP;

@@ -22,6 +22,8 @@ import org.monostudio.api.models.ProductPojo;
 import org.monostudio.api.services.PaginationService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Product;
+import org.monostudio.jpa.entities.ProductStatus;
+import org.monostudio.jpa.repositories.ProductsRepository;
 import org.monostudio.jpa.services.SortSpecParserService;
 import org.monostudio.jpa.services.crud.ProductsCrudService;
 import org.monostudio.jpa.services.predicates.ProductsPredicateService;
@@ -41,14 +43,18 @@ import static org.springframework.http.HttpStatus.NO_CONTENT;
 public class DataProductsController
     extends DataCrudGenericController<ProductPojo, Product> {
 
+    private final ProductsRepository productsRepository;
+
     @Autowired
     public DataProductsController(
         PaginationService paginationService,
         SortSpecParserService sortService,
         ProductsCrudService crudService,
-        ProductsPredicateService predicateService
+        ProductsPredicateService predicateService,
+        ProductsRepository productsRepository
     ) {
         super(paginationService, sortService, crudService, predicateService);
+        this.productsRepository = productsRepository;
     }
 
     @Override
@@ -101,5 +107,60 @@ public class DataProductsController
     @Override
     protected Map<String, OrderSpecifier<?>> getOrderSpecMap() {
         return ProductsSortSpec.ORDER_SPEC_MAP;
+    }
+
+    /**
+     * Publish a draft product — makes it visible to customers.
+     *
+     * @param id Product ID
+     * @return Updated ProductPojo with status PUBLISHED
+     */
+    @PatchMapping("/{id}/publish")
+    @Operation(summary = "Publish a draft product — makes it visible to customers")
+    @PreAuthorize("hasAuthority('products:update')")
+    public ProductPojo publishProduct(@PathVariable Long id)
+        throws EntityNotFoundException {
+        Product product = productsRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
+        product.setStatus(ProductStatus.PUBLISHED);
+        productsRepository.saveAndFlush(product);
+        return crudService.findById(id);
+    }
+
+    /**
+     * Unpublish a product — hides it from customers (discontinued, seasonal, etc.).
+     * The product remains in the system for existing orders and admin visibility.
+     *
+     * @param id Product ID
+     * @return Updated ProductPojo with status UNLISTED
+     */
+    @PatchMapping("/{id}/unpublish")
+    @Operation(summary = "Unpublish a product — hides it from customers (discontinued/seasonal)")
+    @PreAuthorize("hasAuthority('products:update')")
+    public ProductPojo unpublishProduct(@PathVariable Long id)
+        throws EntityNotFoundException {
+        Product product = productsRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
+        product.setStatus(ProductStatus.UNLISTED);
+        productsRepository.saveAndFlush(product);
+        return crudService.findById(id);
+    }
+
+    /**
+     * Revert a product back to draft — removes it from public visibility.
+     *
+     * @param id Product ID
+     * @return Updated ProductPojo with status DRAFT
+     */
+    @PatchMapping("/{id}/revert-to-draft")
+    @Operation(summary = "Revert a product back to draft — removes from public visibility")
+    @PreAuthorize("hasAuthority('products:update')")
+    public ProductPojo revertToDraft(@PathVariable Long id)
+        throws EntityNotFoundException {
+        Product product = productsRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
+        product.setStatus(ProductStatus.DRAFT);
+        productsRepository.saveAndFlush(product);
+        return crudService.findById(id);
     }
 }

@@ -137,7 +137,11 @@ public class AdminDashboardServiceImpl
 
     private Instant toInstant(LocalDate date, boolean startOfDay) {
         if (date == null) {
-            return startOfDay ? Instant.MIN : Instant.now();
+            // Default to 30 days ago for "from", now for "to"
+            if (startOfDay) {
+                return LocalDate.now(ZoneOffset.UTC).minusDays(30).atStartOfDay(ZoneOffset.UTC).toInstant();
+            }
+            return Instant.now();
         }
         return startOfDay
             ? date.atStartOfDay(ZoneOffset.UTC).toInstant()

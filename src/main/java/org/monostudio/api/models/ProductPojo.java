@@ -37,4 +37,12 @@ public class ProductPojo {
     private Double averageRating;
     /** Total count of approved reviews */
     private Integer totalReviews;
+
+    /**
+     * Product visibility lifecycle status.
+     * - DRAFT:     not visible to customers (pre-launch)
+     * - PUBLISHED: visible and available for purchase
+     * - UNLISTED:  was available but now hidden
+     */
+    private String status;
 }

@@ -12,6 +12,7 @@ import org.monostudio.jpa.DBEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -81,6 +82,18 @@ public class Product
     private List<ProductReview> reviews;
 
     /**
+     * Product visibility lifecycle status.
+     * Controls whether the product appears in public product listings.
+     * - DRAFT:     not visible to customers (pre-launch)
+     * - PUBLISHED: visible and available for purchase
+     * - UNLISTED:  was available but now hidden (discontinued, seasonal, etc.)
+     */
+    @Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "product_status", nullable = false)
+    @Builder.Default
+    private ProductStatus status = ProductStatus.DRAFT;
+
+    /**
      * Please note: this copy-constructor does not include a Product's relationship to a ProductCategory,
      * Variants, or Reviews.
      *
@@ -95,5 +108,6 @@ public class Product
         this.stockCurrent = source.stockCurrent;
         this.stockCritical = source.stockCritical;
         this.productCategory = null;
+        this.status = source.status;
     }
 }

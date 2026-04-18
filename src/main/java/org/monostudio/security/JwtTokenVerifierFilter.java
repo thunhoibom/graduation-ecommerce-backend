@@ -100,6 +100,7 @@ public class JwtTokenVerifierFilter
                         return;
                     }
                     Set<SimpleGrantedAuthority> authorities = this.extractAuthorities(tokenBody);
+                    myLogger.info("JWT verified for user '{}' — authorities: {}", username, authorities);
                     Authentication authentication = new UsernamePasswordAuthenticationToken(
                         username,
                         null,

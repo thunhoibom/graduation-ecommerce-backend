@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.monostudio.jpa.entities.ProductStatus;
 import org.monostudio.jpa.services.ProductCategoryTreeResolverService;
 import org.monostudio.jpa.services.predicates.ProductsPredicateService;
 
@@ -34,11 +35,14 @@ public class ProductsPredicateServiceImpl
             try {
                 switch (paramName) {
                     case "id":
-                        return basePath.id.eq(Long.valueOf(stringValue));
+                        predicate.and(basePath.id.eq(Long.valueOf(stringValue)));
+                        break;
                     case "barcode":
-                        return basePath.barcode.eq(stringValue);
+                        predicate.and(basePath.barcode.eq(stringValue));
+                        break;
                     case "name":
-                        return basePath.name.eq(stringValue);
+                        predicate.and(basePath.name.eq(stringValue));
+                        break;
                     case "barcodeLike":
                         predicate.and(basePath.barcode.likeIgnoreCase("%" + stringValue + "%"));
                         break;
@@ -52,6 +56,14 @@ public class ProductsPredicateServiceImpl
                         break;
                     case "categoryCodeLike":
                         predicate.and(basePath.productCategory.code.likeIgnoreCase("%" + stringValue + "%"));
+                        break;
+                    case "status":
+                        try {
+                            ProductStatus status = ProductStatus.valueOf(stringValue.toUpperCase());
+                            predicate.and(basePath.status.eq(status));
+                        } catch (IllegalArgumentException exc) {
+                            logger.info("Invalid status value: '{}' — ignoring filter", stringValue);
+                        }
                         break;
                     default:
                         break;

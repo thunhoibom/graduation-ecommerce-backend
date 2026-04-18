@@ -86,6 +86,18 @@ public class DataUsersController
         crudService.delete(id);
     }
 
+    @PatchMapping("/{id}")
+    @Operation(summary = "Partial update of users.")
+    @ResponseStatus(NO_CONTENT)
+    @PreAuthorize("hasAuthority('users:update')")
+    public void partialUpdate(
+        @RequestBody Map<String, Object> input,
+        @PathVariable Long id
+    ) throws BadInputException, EntityNotFoundException {
+        crudService.partialUpdate(input, id)
+            .orElseThrow(() -> new EntityNotFoundException("User not found: " + id));
+    }
+
     @Override
     protected Map<String, OrderSpecifier<?>> getOrderSpecMap() {
         return UsersSortSpec.ORDER_SPEC_MAP;

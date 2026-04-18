@@ -42,8 +42,7 @@ public interface OrdersRepository
      */
     @Query("SELECT s.status.name AS status, COUNT(s) AS count "
         + "FROM Order s "
-        + "WHERE (:from IS NULL OR s.date >= :from) "
-        + "AND (:to IS NULL OR s.date <= :to) "
+        + "WHERE s.date >= :from AND s.date <= :to "
         + "GROUP BY s.status.name")
     List<OrderStatusCountProjection> countByStatusGrouped(
         @Param("from") Instant from,
@@ -182,4 +181,17 @@ public interface OrdersRepository
     List<Order> findByStatusNameAndDateBefore(
         @Param("statusName") String statusName,
         @Param("cutoff") Instant cutoff);
+
+    /**
+     * Finds all orders belonging to a specific customer.
+     * Uses JOIN FETCH to eagerly load details for display.
+     *
+     * @param customerId The customer's ID
+     * @return List of orders sorted by date descending
+     */
+    @Query("SELECT o FROM Order o "
+        + "LEFT JOIN FETCH o.details "
+        + "WHERE o.customer.id = :customerId "
+        + "ORDER BY o.date DESC")
+    List<Order> findByCustomerId(@Param("customerId") Long customerId);
 }

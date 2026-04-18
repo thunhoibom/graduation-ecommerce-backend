@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.monostudio.api.models.ProductPojo;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Product;
+import org.monostudio.jpa.entities.ProductStatus;
 import org.monostudio.jpa.services.patch.ProductsPatchService;
 
 import java.util.Map;
@@ -53,6 +54,18 @@ public class ProductsPatchServiceImpl
         if (changes.containsKey("criticalStock")) {
             Integer criticalStock = (Integer) changes.get("criticalStock");
             target.setStockCritical(criticalStock);
+        }
+
+        if (changes.containsKey("status")) {
+            Object statusRaw = changes.get("status");
+            if (statusRaw != null) {
+                try {
+                    ProductStatus status = ProductStatus.valueOf(statusRaw.toString().toUpperCase());
+                    target.setStatus(status);
+                } catch (IllegalArgumentException exc) {
+                    throw new BadInputException("Invalid product status: " + statusRaw);
+                }
+            }
         }
 
         return target;

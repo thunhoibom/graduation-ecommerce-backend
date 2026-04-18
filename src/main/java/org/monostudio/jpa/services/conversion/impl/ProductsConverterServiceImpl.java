@@ -10,6 +10,7 @@ import org.monostudio.api.models.ProductPojo;
 import org.monostudio.jpa.entities.Product;
 import org.monostudio.jpa.entities.ProductCategory;
 import org.monostudio.jpa.entities.ProductImage;
+import org.monostudio.jpa.entities.ProductStatus;
 import org.monostudio.jpa.repositories.ProductImagesRepository;
 import org.monostudio.jpa.repositories.ProductReviewsRepository;
 import org.monostudio.jpa.repositories.ProductsCategoriesRepository;
@@ -55,6 +56,7 @@ public class ProductsConverterServiceImpl
             .description(source.getDescription())
             .currentStock(source.getStockCurrent())
             .criticalStock(source.getStockCritical())
+            .status(source.getStatus() != null ? source.getStatus().name() : ProductStatus.DRAFT.name())
             .build();
 
         ProductCategory category = source.getProductCategory();
@@ -109,6 +111,17 @@ public class ProductsConverterServiceImpl
         ProductCategoryPojo sourceCategory = source.getCategory();
         if (sourceCategory!=null && !StringUtils.isBlank(sourceCategory.getCode())) {
             productsCategoriesRepository.findByCode(sourceCategory.getCode()).ifPresent(target::setProductCategory);
+        }
+
+        // Set status — default to DRAFT if not specified
+        if (!StringUtils.isBlank(source.getStatus())) {
+            try {
+                target.setStatus(ProductStatus.valueOf(source.getStatus()));
+            } catch (IllegalArgumentException exc) {
+                target.setStatus(ProductStatus.DRAFT);
+            }
+        } else {
+            target.setStatus(ProductStatus.DRAFT);
         }
 
         return target;
