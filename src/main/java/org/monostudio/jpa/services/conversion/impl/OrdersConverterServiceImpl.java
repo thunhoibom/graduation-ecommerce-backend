@@ -10,6 +10,7 @@ import org.monostudio.api.models.OrderDetailPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.models.PersonPojo;
 import org.monostudio.api.models.ProductPojo;
+import org.monostudio.api.models.ProductVariantPojo;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Address;
 import org.monostudio.jpa.entities.BillingCompany;
@@ -17,6 +18,7 @@ import org.monostudio.jpa.entities.BillingType;
 import org.monostudio.jpa.entities.Customer;
 import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.entities.OrderDetail;
+import org.monostudio.jpa.entities.Person;
 import org.monostudio.jpa.entities.Product;
 import org.monostudio.jpa.entities.ProductVariant;
 import org.monostudio.jpa.entities.ShippingMethod;
@@ -32,6 +34,7 @@ import org.monostudio.jpa.services.conversion.BillingCompaniesConverterService;
 import org.monostudio.jpa.services.conversion.CustomersConverterService;
 import org.monostudio.jpa.services.conversion.ProductsConverterService;
 import org.monostudio.jpa.services.conversion.OrdersConverterService;
+import org.monostudio.jpa.services.conversion.ProductVariantsConverterService;
 import org.monostudio.jpa.services.conversion.SalespeopleConverterService;
 import org.monostudio.jpa.services.crud.BillingCompaniesCrudService;
 import org.monostudio.jpa.services.crud.CustomersCrudService;
@@ -62,6 +65,7 @@ public class OrdersConverterServiceImpl
     private final PaymentTypesRepository paymentTypesRepository;
     private final OrderStatusesRepository orderStatusesRepository;
     private final AddressesConverterService addressesConverterService;
+    private final ProductVariantsConverterService productVariantsConverterService;
     static final double TAX_PERCENT = 0.19; // TODO refactor into a "tax service" of sorts
     static final String UNEXISTING_BILLING_TYPE = "Specified billing type does not exist";
 
@@ -80,7 +84,8 @@ public class OrdersConverterServiceImpl
         AddressesRepository addressesRepository,
         PaymentTypesRepository paymentTypesRepository,
         OrderStatusesRepository orderStatusesRepository,
-        AddressesConverterService addressesConverterService
+        AddressesConverterService addressesConverterService,
+        ProductVariantsConverterService productVariantsConverterService
     ) {
         this.customersCrudService = customersCrudService;
         this.customersConverterService = customersConverterService;
@@ -96,11 +101,13 @@ public class OrdersConverterServiceImpl
         this.paymentTypesRepository = paymentTypesRepository;
         this.orderStatusesRepository = orderStatusesRepository;
         this.addressesConverterService = addressesConverterService;
+        this.productVariantsConverterService = productVariantsConverterService;
     }
 
     @Override
     public OrderPojo convertToPojo(Order source) {
         OrderPojo target = OrderPojo.builder()
+            .id(source.getId())
             .buyOrder(source.getId())
             .date(source.getDate())
             .netValue(source.getNetValue())
@@ -122,6 +129,35 @@ public class OrdersConverterServiceImpl
         target.setPaymentType(source.getPaymentType().getName());
         target.setBillingType(source.getBillingType().getName());
 
+        // Derive payment status
+        String statusName = source.getStatus().getName();
+        String paymentTypeName = source.getPaymentType().getName();
+        boolean isCompleted = statusName.equals(org.monostudio.config.Constants.ORDER_STATUS_COMPLETED);
+        boolean isPaidStatus = statusName.equals(org.monostudio.config.Constants.ORDER_STATUS_PAID_UNCONFIRMED)
+            || statusName.equals(org.monostudio.config.Constants.ORDER_STATUS_PAID_CONFIRMED);
+        boolean isOnlinePayment = !paymentTypeName.equalsIgnoreCase("COD");
+
+        if (isCompleted || (isPaidStatus && isOnlinePayment)) {
+            target.setPaymentStatus("PAID");
+        } else {
+            target.setPaymentStatus("UNPAID");
+        }
+
+        if (source.getBillingAddress() != null) {
+            target.setBillingAddress(addressesConverterService.convertToPojo(source.getBillingAddress()));
+        }
+
+        if (source.getShippingAddress() != null) {
+            target.setShippingAddress(addressesConverterService.convertToPojo(source.getShippingAddress()));
+        }
+
+        if (source.getDetails() != null) {
+            List<OrderDetailPojo> details = source.getDetails().stream()
+                .map(this::convertDetailToPojo)
+                .collect(Collectors.toList());
+            target.setDetails(details);
+        }
+
         if (target.getBillingType().equals(BILLING_TYPE_ENTERPRISE)) {
             BillingCompany sourceBillingCompany = source.getBillingCompany();
             BillingCompanyPojo targetBillingCompany = billingCompaniesConverterService.convertToPojo(sourceBillingCompany);
@@ -136,6 +172,15 @@ public class OrdersConverterServiceImpl
             PersonPojo salesperson = salespeopleConverterService.convertToPojo(source.getSalesperson());
             target.setSalesperson(salesperson);
         }
+
+        Person sourcePerson = source.getCustomer().getPerson();
+        String fullName = String.format("%s %s", sourcePerson.getFirstName(), sourcePerson.getLastName()).trim();
+        target.setCustomerName(fullName);
+        target.setCustomerEmail(sourcePerson.getEmail());
+        target.setRecipientName(fullName);
+        target.setRecipientPhone(sourcePerson.getPhone1());
+        target.setRecipientEmail(sourcePerson.getEmail());
+
         return target;
     }
 
@@ -173,10 +218,15 @@ public class OrdersConverterServiceImpl
     public OrderDetailPojo convertDetailToPojo(OrderDetail source) {
         Product sourceProduct = source.getProduct();
         ProductPojo product = productConverterService.convertToPojo(sourceProduct);
+        ProductVariantPojo variant = null;
+        if (source.getProductVariant() != null) {
+            variant = productVariantsConverterService.convertToPojo(source.getProductVariant());
+        }
         return OrderDetailPojo.builder()
             .unitValue(source.getUnitValue())
             .units(source.getUnits())
             .product(product)
+            .variant(variant)
             .description(source.getDescription())
             .variantId(source.getProductVariant() != null ? source.getProductVariant().getId() : null)
             .build();
@@ -238,10 +288,18 @@ public class OrdersConverterServiceImpl
     private void convertPaymentTypeInformationForEntity(OrderPojo model, Order target) throws BadInputException {
         String paymentType = model.getPaymentType();
         if (!StringUtils.isBlank(paymentType)) {
-            paymentTypesRepository.findByName(paymentType)
+            // Normalize common aliases
+            if (paymentType.equalsIgnoreCase("COD")) {
+                paymentType = "COD";
+            } else if (paymentType.equalsIgnoreCase("VNPAY") || paymentType.equalsIgnoreCase("WebPay Plus")) {
+                paymentType = "VNPAY";
+            }
+
+            String finalPaymentType = paymentType;
+            paymentTypesRepository.findByName(finalPaymentType)
                 .ifPresentOrElse(target::setPaymentType,
                     () -> {
-                        throw new RuntimeException("The payment type does not exist");
+                        throw new RuntimeException("The payment type '" + finalPaymentType + "' does not exist");
                     });
         } else {
             throw new BadInputException("A payment type has to be included");
@@ -272,13 +330,24 @@ public class OrdersConverterServiceImpl
      */
     private void convertBillingInformationForEntity(OrderPojo model, Order target) throws BadInputException {
         String pojoBillingTypeName = model.getBillingType();
-        Optional<BillingType> existingBillingType = billingTypesRepository.findByName(pojoBillingTypeName);
+
+        // Normalize common aliases to match DB constants
+        if (pojoBillingTypeName != null) {
+            if (pojoBillingTypeName.equalsIgnoreCase("individual")) {
+                pojoBillingTypeName = org.monostudio.config.Constants.BILLING_TYPE_INDIVIDUAL;
+            } else if (pojoBillingTypeName.equalsIgnoreCase("enterprise")) {
+                pojoBillingTypeName = org.monostudio.config.Constants.BILLING_TYPE_ENTERPRISE;
+            }
+        }
+
+        String finalBillingType = pojoBillingTypeName;
+        Optional<BillingType> existingBillingType = billingTypesRepository.findByName(finalBillingType);
         if (existingBillingType.isEmpty()) {
-            throw new BadInputException(UNEXISTING_BILLING_TYPE);
+            throw new BadInputException("Specified billing type '" + finalBillingType + "' does not exist");
         }
         target.setBillingType(existingBillingType.get());
 
-        if (pojoBillingTypeName.equals(BILLING_TYPE_ENTERPRISE)) {
+        if (finalBillingType.equals(BILLING_TYPE_ENTERPRISE)) {
             BillingCompanyPojo pojoBillingCompany = model.getBillingCompany();
             Optional<BillingCompany> existingCompany = billingCompaniesCrudService.getExisting(pojoBillingCompany);
             if (existingCompany.isEmpty()) {

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.monostudio.api.models.CheckoutStartRequest;
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.services.CheckoutService;
@@ -28,14 +29,15 @@ import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.web.bind.annotation.RequestHeader;
 import java.net.URI;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 import static org.springframework.http.HttpStatus.SEE_OTHER;
 import static org.monostudio.config.Constants.AUTHORITY_CHECKOUT;
-import static org.monostudio.config.Constants.WEBPAY_ABORTION_TOKEN_HEADER_NAME;
-import static org.monostudio.config.Constants.WEBPAY_SUCCESS_TOKEN_HEADER_NAME;
+import static org.monostudio.config.Constants.VNPAY_TXN_REF_PARAM;
+import static org.monostudio.config.Constants.VNPAY_RESPONSE_CODE_PARAM;
 
 @RestController
 @RequestMapping("/api/public/checkout")
@@ -68,16 +70,27 @@ public class PublicCheckoutController {
     @PostMapping
     @Operation(summary = "Submit cart contents to request an order and begin a checkout")
     @PreAuthorize("hasAuthority('" + AUTHORITY_CHECKOUT + "')")
-    public PaymentRedirectionDetailsPojo submitCart(@Valid @RequestBody OrderPojo transactionRequest)
-        throws BadInputException, PaymentServiceException, EntityExistsException {
-        OrderPojo createdTransaction = ordersCrudService.create(transactionRequest);
-        return service.requestTransactionStart(createdTransaction);
+    public PaymentRedirectionDetailsPojo submitCart(
+        @Valid @RequestBody CheckoutStartRequest transactionRequest,
+        @RequestHeader(value = "X-Session-Token", required = false) String sessionTokenHeader
+    ) throws BadInputException, PaymentServiceException {
+        // Support setting session token from header if absent in body
+        if ((transactionRequest.getSessionToken() == null || transactionRequest.getSessionToken().isBlank())
+            && sessionTokenHeader != null && !sessionTokenHeader.isBlank()) {
+            transactionRequest.setSessionToken(sessionTokenHeader);
+        }
+
+        if (transactionRequest.getSessionToken() == null || transactionRequest.getSessionToken().isBlank()) {
+            throw new BadInputException("A session token is required (either in body or X-Session-Token header)");
+        }
+
+        return service.startCheckout(transactionRequest);
     }
 
     /**
-     * Validate token sent from WebPay Plus after a succesful transaction
+     * Validate token sent from VNPAY after a transaction is completed or aborted
      *
-     * @param transactionData The HTTP headers
+     * @param transactionData The HTTP parameters
      * @return A 303 SEE OTHER response
      * @throws BadInputException       If the expected token is not present in the request
      * @throws EntityNotFoundException If the token does not match that of any "pending" transaction
@@ -85,43 +98,21 @@ public class PublicCheckoutController {
      */
     @GetMapping("/validate")
     @Operation(summary = "Request that an order status be updated after having begun checkout")
-    public ResponseEntity<Void> validateSuccesfulTransaction(@RequestParam Map<String, String> transactionData)
+    public ResponseEntity<Void> validateTransaction(@RequestParam Map<String, String> transactionData)
         throws BadInputException, EntityNotFoundException, PaymentServiceException {
-        if (!transactionData.containsKey(WEBPAY_SUCCESS_TOKEN_HEADER_NAME)) { // success
+        if (!transactionData.containsKey(VNPAY_TXN_REF_PARAM)) {
             throw new BadInputException("No transaction token was provided");
         }
-        String token = transactionData.get(WEBPAY_SUCCESS_TOKEN_HEADER_NAME);
-        service.confirmTransaction(token, false);
+        String token = transactionData.get(VNPAY_TXN_REF_PARAM);
+        String responseCode = transactionData.get(VNPAY_RESPONSE_CODE_PARAM);
+        
+        boolean isAborted = responseCode == null || !responseCode.equals("00");
+        service.confirmTransaction(token, isAborted);
+        
         URI transactionUri = service.generateResultPageUrl(token);
         return ResponseEntity
             .status(SEE_OTHER)
             .location(transactionUri)
-            .build();
-    }
-
-    /**
-     * Validate token sent from WebPay Plus after a transaction was aborted
-     *
-     * @param transactionData The HTTP headers
-     * @return A 303 SEE OTHER response
-     * @throws BadInputException       If the expected token is not present in the request
-     * @throws EntityNotFoundException If the token does not match that of any "pending" transaction
-     * @throws PaymentServiceException If an error happens during internal API calls
-     */
-    @PostMapping("/validate")
-    @Operation(summary = "Submit failed or aborted state for an order after having begun checkout")
-    public ResponseEntity<Void> validateAbortedTransaction(@RequestParam Map<String, String> transactionData)
-        throws BadInputException, EntityNotFoundException, PaymentServiceException {
-
-        if (!transactionData.containsKey(WEBPAY_ABORTION_TOKEN_HEADER_NAME)) { // aborted
-            throw new BadInputException("No transaction token was provided");
-        }
-        String token = transactionData.get(WEBPAY_ABORTION_TOKEN_HEADER_NAME);
-        service.confirmTransaction(token, true);
-        URI resultPageUrl = service.generateResultPageUrl(token);
-        return ResponseEntity
-            .status(SEE_OTHER)
-            .location(resultPageUrl)
             .build();
     }
 

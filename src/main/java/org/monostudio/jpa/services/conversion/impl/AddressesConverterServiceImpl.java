@@ -14,6 +14,10 @@ public class AddressesConverterServiceImpl
 
     @Override
     public AddressPojo convertToPojo(Address source) {
+        if (source == null) {
+            return null;
+        }
+        
         AddressPojo target = AddressPojo.builder()
             .city(source.getCity())
             .municipality(source.getMunicipality())

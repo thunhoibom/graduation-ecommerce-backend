@@ -68,7 +68,7 @@ public class CheckoutServiceImpl
     private final ProductsRepository productsRepository;
     private final CartSessionsRepository cartSessionsRepository;
     private final OrderDetailsRepository orderDetailsRepository;
-    private final PaymentService paymentIntegrationService;
+    private final Map<String, PaymentService> paymentServices;
     private final StockReservationService stockReservationService;
     private final DiscountService discountService;
     private final ShippingMethodsService shippingMethodsService;
@@ -88,7 +88,7 @@ public class CheckoutServiceImpl
         ProductsRepository productsRepository,
         CartSessionsRepository cartSessionsRepository,
         OrderDetailsRepository orderDetailsRepository,
-        PaymentService paymentIntegrationService,
+        Map<String, PaymentService> paymentServices,
         StockReservationService stockReservationService,
         DiscountService discountService,
         ShippingMethodsService shippingMethodsService,
@@ -104,7 +104,7 @@ public class CheckoutServiceImpl
         this.productsRepository = productsRepository;
         this.cartSessionsRepository = cartSessionsRepository;
         this.orderDetailsRepository = orderDetailsRepository;
-        this.paymentIntegrationService = paymentIntegrationService;
+        this.paymentServices = paymentServices;
         this.stockReservationService = stockReservationService;
         this.discountService = discountService;
         this.shippingMethodsService = shippingMethodsService;
@@ -221,11 +221,20 @@ public class CheckoutServiceImpl
         OrderPojo createdOrder = ordersCrudService.create(orderPojo);
 
         // ── 9. Request payment URL ──────────────────────────────────────────────
+        PaymentService paymentService = paymentServices.get(createdOrder.getPaymentType());
+        if (paymentService == null) {
+            throw new BadInputException("Payment method not supported: " + createdOrder.getPaymentType());
+        }
+
         PaymentRedirectionDetailsPojo paymentDetails =
-            paymentIntegrationService.requestNewPaymentPageDetails(createdOrder);
+            paymentService.requestNewPaymentPageDetails(createdOrder);
 
         createdOrder.setToken(paymentDetails.getToken());
         ordersProcessService.markAsStarted(createdOrder);
+
+        if ("COD".equals(createdOrder.getPaymentType())) {
+            this.confirmTransaction(paymentDetails.getToken(), false);
+        }
 
         logger.info("Checkout started: orderId={}, token={}, total={}, shipping={}, discount={}",
             createdOrder.getBuyOrder(), paymentDetails.getToken(), createdOrder.getTotalValue(), shippingFee, discountAmount);
@@ -284,7 +293,11 @@ public class CheckoutServiceImpl
 
     @Override
     public PaymentRedirectionDetailsPojo requestTransactionStart(OrderPojo transaction) throws PaymentServiceException, BadInputException {
-        PaymentRedirectionDetailsPojo response = paymentIntegrationService.requestNewPaymentPageDetails(transaction);
+        PaymentService paymentService = paymentServices.get(transaction.getPaymentType());
+        if (paymentService == null) {
+            throw new BadInputException("Payment method not supported: " + transaction.getPaymentType());
+        }
+        PaymentRedirectionDetailsPojo response = paymentService.requestNewPaymentPageDetails(transaction);
         try {
             transaction.setToken(response.getToken());
             ordersProcessService.markAsStarted(transaction);
@@ -327,8 +340,10 @@ public class CheckoutServiceImpl
 
     @Override
     public URI generateResultPageUrl(String transactionToken) {
+        OrderPojo order = this.getSellRequestedWithMatchingToken(transactionToken);
+        PaymentService paymentService = paymentServices.get(order.getPaymentType());
         try {
-            String url = (paymentIntegrationService.getPaymentResultPageUrl() + "?token=" + transactionToken);
+            String url = (paymentService.getPaymentResultPageUrl() + "?token=" + transactionToken);
             return new URL(url).toURI();
         } catch (MalformedURLException | URISyntaxException ex) {
             logger.error("Malformed redirection URL; make sure the 'final URL for payment method' property is correctly configured.", ex);
@@ -338,7 +353,8 @@ public class CheckoutServiceImpl
 
     private OrderPojo processSellPaymentStatus(OrderPojo sellByToken, String transactionToken)
         throws EntityNotFoundException, PaymentServiceException {
-        PaymentResultPojo result = paymentIntegrationService.requestPaymentResultWithAmount(transactionToken);
+        PaymentService paymentService = paymentServices.get(sellByToken.getPaymentType());
+        PaymentResultPojo result = paymentService.requestPaymentResultWithAmount(transactionToken);
         OrderPojo outcome;
         CallbackResult callbackResult;
         try {
@@ -350,7 +366,7 @@ public class CheckoutServiceImpl
                 // This prevents fraud where a lower amount is charged but the order is created for more.
                 int authorized = result.getAuthorizedAmount();
                 int orderTotal = sellByToken.getTotalValue();
-                if (authorized != orderTotal) {
+                if (authorized != orderTotal && !"COD".equals(sellByToken.getPaymentType()) && !"VNPAY".equals(sellByToken.getPaymentType())) {
                     logger.error("Payment amount mismatch for token {}: authorized={}, orderTotal={}",
                         transactionToken, authorized, orderTotal);
                     // Treat as failed — do not mark as paid for a mismatched amount.

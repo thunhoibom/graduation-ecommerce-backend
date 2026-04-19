@@ -31,7 +31,8 @@ VALUES
 INSERT INTO `payment_types`
 (`payment_type_id`, `payment_type_name`)
 VALUES
-(01, 'WebPay Plus');
+(01, 'VNPAY'),
+(02, 'COD');
 
 INSERT INTO `app_user_roles`
 (`user_role_id`, `user_role_name`)

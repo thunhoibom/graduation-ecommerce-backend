@@ -27,4 +27,5 @@ public class OrderDetailPojo {
      * Null if this line item was ordered without a variant.
      */
     private Long variantId;
+    private ProductVariantPojo variant;
 }

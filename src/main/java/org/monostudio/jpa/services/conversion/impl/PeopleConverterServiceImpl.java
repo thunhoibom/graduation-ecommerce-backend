@@ -1,6 +1,7 @@
 package org.monostudio.jpa.services.conversion.impl;
 
 import lombok.NoArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.monostudio.api.models.PersonPojo;
 import org.monostudio.jpa.entities.Person;
@@ -33,7 +34,7 @@ public class PeopleConverterServiceImpl
         Person target = Person.builder()
             .firstName(source.getFirstName())
             .lastName(source.getLastName())
-            .idNumber(source.getIdNumber())
+            .idNumber(StringUtils.isNotBlank(source.getIdNumber()) ? source.getIdNumber() : "GUEST-" + java.util.UUID.randomUUID().toString().substring(0, 8))
             .email(source.getEmail())
             .build();
         if (source.getPhone1()!=null) {

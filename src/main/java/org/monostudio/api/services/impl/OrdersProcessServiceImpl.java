@@ -36,6 +36,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.monostudio.config.Constants.ORDER_STATUS_ADMIN_CANCELLED;
@@ -65,7 +66,7 @@ public class OrdersProcessServiceImpl
     private final MailingService mailingService;
     private final StockReservationService stockReservationService;
     private final DiscountService discountService;
-    private final PaymentService paymentService;
+    private final Map<String, PaymentService> paymentServices;
     private final RefundRetryService refundRetryService;
     private final CartSessionsRepository cartSessionsRepository;
     private final CartItemsRepository cartItemsRepository;
@@ -80,7 +81,7 @@ public class OrdersProcessServiceImpl
         @Autowired(required = false) MailingService mailingService,
         StockReservationService stockReservationService,
         DiscountService discountService,
-        @Autowired(required = false) PaymentService paymentService,
+        @Autowired(required = false) Map<String, PaymentService> paymentServices,
         @Autowired(required = false) RefundRetryService refundRetryService,
         CartSessionsRepository cartSessionsRepository,
         CartItemsRepository cartItemsRepository
@@ -94,7 +95,7 @@ public class OrdersProcessServiceImpl
         this.mailingService = mailingService;
         this.stockReservationService = stockReservationService;
         this.discountService = discountService;
-        this.paymentService = paymentService;
+        this.paymentServices = paymentServices;
         this.refundRetryService = refundRetryService;
         this.cartSessionsRepository = cartSessionsRepository;
         this.cartItemsRepository = cartItemsRepository;
@@ -378,9 +379,8 @@ public class OrdersProcessServiceImpl
             }
         }
 
-        // P0.3: Initiate refund for the customer since payment was already captured.
-        // Precondition guarantees we are in PAID_UNCONFIRMED — payment WAS made.
-        // Enqueue refund via retry queue (same logic as markAsAdminCancelled).
+        // Initiate refund for the customer since payment was already captured.
+        PaymentService paymentService = paymentServices != null ? paymentServices.get(existingOrder.getPaymentType()) : null;
         if (existingOrder.getTransactionToken() != null && paymentService != null) {
             try {
                 RefundResultPojo result = paymentService.refund(
@@ -505,8 +505,7 @@ public class OrdersProcessServiceImpl
         }
 
         // If payment was already made, trigger a refund through the payment gateway.
-        // P0.2: On gateway failure, enqueue to refund retry queue instead of swallowing silently.
-        // The queue will retry automatically with exponential backoff. Admin is alerted on final failure.
+        PaymentService paymentService = paymentServices != null ? paymentServices.get(existingOrder.getPaymentType()) : null;
         if (wasPaid && existingOrder.getTransactionToken() != null && paymentService != null) {
             try {
                 RefundResultPojo result = paymentService.refund(

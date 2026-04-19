@@ -26,7 +26,9 @@
       "Read(//mnt/d/**)",
       "Read(//mnt/**)",
       "Bash(ls /home/)",
-      "Read(//c/Users/Nguyen/**)"
+      "Read(//c/Users/Nguyen/**)",
+      "Bash(ls \"D:/GRADUATION_PROJECT/graduation_ecommerce/graduation-ecommerce-backend/src/main/java/org/monostudio\")",
+      "Read(//d/GRADUATION_PROJECT/graduation_ecommerce/**)"
     ]
   }
 }

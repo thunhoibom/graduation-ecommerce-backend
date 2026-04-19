@@ -14,6 +14,9 @@ public interface CustomersRepository
     @Query(value = "SELECT c FROM Customer c JOIN FETCH c.person p WHERE p.idNumber = :idNumber")
     Optional<Customer> findByPersonIdNumber(@Param("idNumber") String idNumber);
 
+    @Query(value = "SELECT c FROM Customer c JOIN FETCH c.person p WHERE p.email = :email")
+    java.util.List<Customer> findAllByPersonEmail(@Param("email") String email);
+
     /**
      * Find a Customer linked to a User by the user's person ID.
      * A User and their corresponding Customer share the same Person record.

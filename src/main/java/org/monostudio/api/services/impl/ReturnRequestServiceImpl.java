@@ -47,7 +47,7 @@ public class ReturnRequestServiceImpl
     private final ReturnRequestsConverterService converterService;
     private final StockAdjustmentService stockAdjustmentService;
     private final MailingService mailingService;
-    private final PaymentService paymentIntegrationService;
+    private final Map<String, PaymentService> paymentServices;
     private final RefundRetryService refundRetryService;
 
     @Autowired
@@ -60,7 +60,7 @@ public class ReturnRequestServiceImpl
         ReturnRequestsConverterService converterService,
         StockAdjustmentService stockAdjustmentService,
         @Autowired(required = false) MailingService mailingService,
-        PaymentService paymentIntegrationService,
+        @Autowired(required = false) Map<String, PaymentService> paymentServices,
         @Autowired(required = false) RefundRetryService refundRetryService
     ) {
         this.returnRequestsRepository = returnRequestsRepository;
@@ -71,7 +71,7 @@ public class ReturnRequestServiceImpl
         this.converterService = converterService;
         this.stockAdjustmentService = stockAdjustmentService;
         this.mailingService = mailingService;
-        this.paymentIntegrationService = paymentIntegrationService;
+        this.paymentServices = paymentServices;
         this.refundRetryService = refundRetryService;
     }
 
@@ -228,12 +228,12 @@ public class ReturnRequestServiceImpl
         }
 
         // ── Call payment gateway ─────────────────────────────────────────────────
-        // P0.2: On gateway failure, enqueue to retry queue instead of swallowing silently.
         String token = order.getTransactionToken();
+        PaymentService paymentService = paymentServices != null ? paymentServices.get(order.getPaymentType()) : null;
         boolean refundSucceeded = false;
-        if (token != null && paymentIntegrationService != null) {
+        if (token != null && paymentService != null) {
             try {
-                RefundResultPojo result = paymentIntegrationService.refund(token, actualRefundAmount);
+                RefundResultPojo result = paymentService.refund(token, actualRefundAmount);
                 if (result.isSuccess()) {
                     logger.info("Refund succeeded for return {}: type={}, code={}, amount={}",
                         id, result.getType(), result.getResponseCode(), actualRefundAmount);

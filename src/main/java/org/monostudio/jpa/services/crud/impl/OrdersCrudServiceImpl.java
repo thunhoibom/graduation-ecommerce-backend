@@ -50,11 +50,11 @@ public class OrdersCrudServiceImpl
 
     @Override
     public Optional<Order> getExisting(OrderPojo input) {
-        Long buyOrder = input.getBuyOrder();
-        if (buyOrder==null) {
+        Long id = input.getId() != null ? input.getId() : input.getBuyOrder();
+        if (id == null) {
             return Optional.empty();
         } else {
-            return this.ordersRepository.findById(buyOrder);
+            return this.ordersRepository.findById(id);
         }
     }
 
@@ -62,23 +62,7 @@ public class OrdersCrudServiceImpl
     public OrderPojo readOne(Predicate conditions) throws EntityNotFoundException {
         Optional<Order> matchingSell = ordersRepository.findOne(conditions);
         if (matchingSell.isPresent()) {
-            Order found = matchingSell.get();
-            OrderPojo target = ordersConverterService.convertToPojo(found);
-
-            AddressPojo billingAddress = addressesConverterService.convertToPojo(found.getBillingAddress());
-            target.setBillingAddress(billingAddress);
-
-            if (found.getShippingAddress()!=null) {
-                AddressPojo shippingAddress = addressesConverterService.convertToPojo(found.getShippingAddress());
-                target.setShippingAddress(shippingAddress);
-            }
-
-            List<OrderDetailPojo> details = found.getDetails().stream()
-                .map(ordersConverterService::convertDetailToPojo)
-                .collect(Collectors.toList());
-            target.setDetails(details);
-
-            return target;
+            return ordersConverterService.convertToPojo(matchingSell.get());
         } else {
             throw new EntityNotFoundException("No sell matches the filtering conditions");
         }

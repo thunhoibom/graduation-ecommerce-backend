@@ -3,6 +3,7 @@ package org.monostudio.api.services.impl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.stereotype.Service;
+import org.monostudio.api.models.AddressPojo;
 import org.monostudio.api.models.ProductPojo;
 import org.monostudio.api.models.ReceiptDetailPojo;
 import org.monostudio.api.models.ReceiptPojo;
@@ -10,7 +11,10 @@ import org.monostudio.api.services.ReceiptService;
 import org.monostudio.jpa.entities.Product;
 import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.entities.OrderDetail;
+import org.monostudio.jpa.entities.Person;
+import org.monostudio.jpa.entities.ProductImage;
 import org.monostudio.jpa.repositories.OrdersRepository;
+import org.monostudio.jpa.repositories.ProductImagesRepository;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.util.ArrayList;
@@ -22,14 +26,17 @@ public class ReceiptServiceImpl
     implements ReceiptService {
     private final OrdersRepository ordersRepository;
     private final ConversionService conversionService;
+    private final ProductImagesRepository productImagesRepository;
 
     @Autowired
     public ReceiptServiceImpl(
         OrdersRepository ordersRepository,
-        ConversionService conversionService
+        ConversionService conversionService,
+        ProductImagesRepository productImagesRepository
     ) {
         this.ordersRepository = ordersRepository;
         this.conversionService = conversionService;
+        this.productImagesRepository = productImagesRepository;
     }
 
     @Override
@@ -42,20 +49,70 @@ public class ReceiptServiceImpl
         Order foundMatch = match.get();
 
         ReceiptPojo target = conversionService.convert(foundMatch, ReceiptPojo.class);
+        if (target != null) {
+            target.setSubtotal(foundMatch.getNetValue());
+            target.setTotal(foundMatch.getTotalValue());
+            target.setShippingFee(foundMatch.getTransportValue());
+            target.setDiscountAmount(foundMatch.getDiscountValue());
+            target.setPaymentType(foundMatch.getPaymentType().getName());
+            target.setCreatedAt(foundMatch.getDate());
 
-        if (target!=null) {
-            List<ReceiptDetailPojo> targetDetails = new ArrayList<>();
+            if (foundMatch.getCustomer() != null && foundMatch.getCustomer().getPerson() != null) {
+                Person p = foundMatch.getCustomer().getPerson();
+                target.setCustomerName(p.getFirstName() + " " + p.getLastName());
+                target.setCustomerEmail(p.getEmail());
+            }
+
+            if (foundMatch.getShippingAddress() != null) {
+                AddressPojo addr = AddressPojo.builder()
+                    .firstLine(foundMatch.getShippingAddress().getFirstLine())
+                    .secondLine(foundMatch.getShippingAddress().getSecondLine())
+                    .municipality(foundMatch.getShippingAddress().getMunicipality())
+                    .city(foundMatch.getShippingAddress().getCity())
+                    .postalCode(foundMatch.getShippingAddress().getPostalCode())
+                    .build();
+                target.setShippingAddress(addr);
+            }
+
+            List<ReceiptDetailPojo> targetItems = new ArrayList<>();
             for (OrderDetail d : foundMatch.getDetails()) {
-                ReceiptDetailPojo targetDetail = conversionService.convert(d, ReceiptDetailPojo.class);
-                if (targetDetail!=null) {
+                ReceiptDetailPojo item = conversionService.convert(d, ReceiptDetailPojo.class);
+                if (item != null) {
                     Product pd = d.getProduct();
+                    item.setProductName(pd.getName());
+                    if (d.getProductVariant() != null) {
+                        item.setVariantSku(d.getProductVariant().getSku());
+                    }
+                    item.setQuantity(d.getUnits());
+                    item.setUnitPrice(d.getUnitValue());
+                    item.setLineTotal(d.getUnits() * d.getUnitValue());
+                    
+                    if (d.getProductVariant() != null && d.getProductVariant().getImages() != null && !d.getProductVariant().getImages().isEmpty()) {
+                        String imgUrl = d.getProductVariant().getImages().stream()
+                            .filter(vi -> vi.getIsPrimary() != null && vi.getIsPrimary())
+                            .findFirst()
+                            .map(vi -> vi.getImage().getUrl())
+                            .orElse(d.getProductVariant().getImages().get(0).getImage().getUrl());
+                        item.setImageUrl(imgUrl);
+                    } else {
+                        // Fallback to Product images
+                        List<ProductImage> pImages = productImagesRepository.deepFindProductImagesByProductIdOrdered(pd.getId());
+                        if (pImages != null && !pImages.isEmpty()) {
+                            String imgUrl = pImages.stream()
+                                .filter(pi -> pi.getIsPrimary() != null && pi.getIsPrimary())
+                                .findFirst()
+                                .map(pi -> pi.getImage().getUrl())
+                                .orElse(pImages.get(0).getImage().getUrl());
+                            item.setImageUrl(imgUrl);
+                        }
+                    }
+
                     ProductPojo targetDetailProduct = ProductPojo.builder().name(pd.getName()).barcode(pd.getBarcode()).build();
-                    targetDetail.setProduct(targetDetailProduct);
-                    targetDetail.setUnitValue(d.getUnitValue());
-                    targetDetails.add(targetDetail);
+                    item.setProduct(targetDetailProduct);
+                    targetItems.add(item);
                 }
             }
-            target.setDetails(targetDetails);
+            target.setItems(targetItems);
             target.setStatus(foundMatch.getStatus().getName());
         }
 

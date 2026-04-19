@@ -21,6 +21,7 @@ import org.monostudio.mailing.MailingServiceException;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Refund retry queue processor with exponential backoff.
@@ -43,19 +44,19 @@ public class RefundRetryServiceImpl
 
     private final RefundRetryQueueRepository queueRepository;
     private final OrdersRepository ordersRepository;
-    private final PaymentService paymentService;
+    private final Map<String, PaymentService> paymentServices;
     private final MailingService mailingService;
 
     @Autowired
     public RefundRetryServiceImpl(
         RefundRetryQueueRepository queueRepository,
         OrdersRepository ordersRepository,
-        @Autowired(required = false) PaymentService paymentService,
+        @Autowired(required = false) Map<String, PaymentService> paymentServices,
         @Autowired(required = false) MailingService mailingService
     ) {
         this.queueRepository = queueRepository;
         this.ordersRepository = ordersRepository;
-        this.paymentService = paymentService;
+        this.paymentServices = paymentServices;
         this.mailingService = mailingService;
     }
 
@@ -151,10 +152,11 @@ public class RefundRetryServiceImpl
      * Executes a single refund retry, updates queue entry state, and handles final failure.
      */
     private void executeRetry(RefundRetryQueue entry) {
+        PaymentService paymentService = paymentServices != null ? paymentServices.get(entry.getOrder().getPaymentType()) : null;
         if (paymentService == null) {
             // No payment service configured — mark as permanently failed
             entry.setStatus(RefundStatus.FAILED_PERMANENT);
-            entry.setLastError("No payment service configured");
+            entry.setLastError("No payment service configured for type: " + entry.getOrder().getPaymentType());
             queueRepository.saveAndFlush(entry);
             sendAdminAlert(entry, "Payment service unavailable — cannot retry");
             return;

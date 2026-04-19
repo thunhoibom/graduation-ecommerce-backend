@@ -23,7 +23,6 @@ import java.util.Collection;
 @JsonInclude
 public class CheckoutStartRequest {
     /** The cart session token (from CartSession.token). Required. */
-    @NotBlank
     private String sessionToken;
 
     /** The selected shipping method ID. */

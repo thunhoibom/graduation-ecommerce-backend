@@ -1,6 +1,8 @@
 package org.monostudio.api.models;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,7 +26,8 @@ public class PersonPojo {
     @NotBlank
     @jakarta.validation.constraints.Email(message = "Invalid email format")
     private String email;
-    // @Pattern(regexp = "^(((\\(\\+?[0-9]{3}\\))|(\\+?[0-9]{3})) ?)?[0-9]{3,4}[ -]?[0-9]{4}$")
+    @JsonProperty("phone1")
+    @JsonAlias("phone")
     private String phone1;
     // @Pattern(regexp = "^(((\\(\\+?[0-9]{3}\\))|(\\+?[0-9]{3})) ?)?[0-9]{3,4}[ -]?[0-9]{4}$")
     private String phone2;

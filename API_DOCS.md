@@ -764,7 +764,7 @@ Confirms all RESERVED items as CONFIRMED (stock is deducted).
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `sessionToken` | string | ✅ | Cart session token |
+| `sessionToken` | string | ❌ | Cart session token (required in body OR `X-Session-Token` header) |
 | `shippingMethodId` | long | ✅ | Shipping method ID |
 | `discountCode` | string | ❌ | Discount code |
 | `customer` | PersonPojo | ❌ | Override customer info |

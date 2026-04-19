@@ -48,7 +48,7 @@ public class Person
     @Size(min = 1, max = 200)
     @Column(name = "person_last_name", nullable = false)
     private String lastName;
-    @Size(min = 1, max = 20)
+    @Size(max = 20)
     @Column(name = "person_id_number", nullable = true, unique = false)
     private String idNumber;
     @Size(min = 5, max = 100)
@@ -65,7 +65,7 @@ public class Person
         this.id = source.id;
         this.firstName = source.firstName;
         this.lastName = source.lastName;
-        this.idNumber = source.idNumber;
+        this.idNumber = source.getIdNumber() != null ? source.getIdNumber() : "";
         this.email = source.email;
         this.phone1 = source.phone1;
         this.phone2 = source.phone2;

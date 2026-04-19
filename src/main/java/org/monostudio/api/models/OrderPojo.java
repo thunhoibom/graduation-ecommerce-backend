@@ -21,6 +21,7 @@ import static com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY;
 @AllArgsConstructor
 @JsonInclude
 public class OrderPojo {
+    private Long id;
     private Long buyOrder;
     @JsonIgnore
     private String token;
@@ -39,6 +40,7 @@ public class OrderPojo {
     private String discountCode;
     private int discountValue;
     private String status;
+    private String paymentStatus;
     private String billingType;
     @NotBlank
     private String paymentType;
@@ -49,4 +51,9 @@ public class OrderPojo {
     private BillingCompanyPojo billingCompany;
     private AddressPojo billingAddress;
     private AddressPojo shippingAddress;
+    private String customerName;
+    private String customerEmail;
+    private String recipientName;
+    private String recipientPhone;
+    private String recipientEmail;
 }

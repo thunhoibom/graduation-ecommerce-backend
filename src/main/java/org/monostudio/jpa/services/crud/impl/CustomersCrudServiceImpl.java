@@ -36,7 +36,11 @@ public class CustomersCrudServiceImpl
     public Optional<Customer> getExisting(PersonPojo input) throws BadInputException {
         String idNumber = input.getIdNumber();
         if (StringUtils.isBlank(idNumber)) {
-            throw new BadInputException("Customer does not have an ID card");
+            // Fallback to email for guests/missing ID
+            if (StringUtils.isNotBlank(input.getEmail())) {
+                return customersRepository.findAllByPersonEmail(input.getEmail()).stream().findFirst();
+            }
+            return Optional.empty();
         } else {
             return customersRepository.findByPersonIdNumber(idNumber);
         }
