@@ -19,6 +19,7 @@ import static com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL;
 @AllArgsConstructor
 @JsonInclude(NON_NULL)
 public class ProductPojo {
+    private Long id;
     @NotBlank
     private String name;
     @NotBlank
@@ -31,6 +32,9 @@ public class ProductPojo {
     private Integer criticalStock;
     private ProductCategoryPojo category;
     private Collection<ImagePojo> images;
+
+    /** URL of the primary image. Read-only convenience field for listings/cart. */
+    private String primaryImageUrl;
 
     // --- Review statistics (populated when including review stats) ---
     /** Average rating across approved reviews (1 decimal place), null if no reviews */

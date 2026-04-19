@@ -25,4 +25,6 @@ public class AddressPojo {
     private String city;
     private String postalCode;
     private String notes;
+    private Double latitude;
+    private Double longitude;
 }

@@ -61,6 +61,9 @@ public class CartItemPojo {
     /** Whether this variant is active */
     private Boolean active;
 
+    /** Primary image URL for the variant (or product fallback). For cart display. */
+    private String primaryImageUrl;
+
     private LocalDateTime addedAt;
     private LocalDateTime updatedAt;
 }

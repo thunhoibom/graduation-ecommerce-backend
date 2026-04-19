@@ -34,11 +34,13 @@ public class ImagesCrudServiceImpl
 
     @Override
     public Optional<Image> getExisting(ImagePojo input) throws BadInputException {
-        String name = input.getFilename();
-        if (StringUtils.isBlank(name)) {
-            throw new BadInputException("Invalid filename");
-        } else {
-            return imagesRepository.findByFilename(name);
+        if (StringUtils.isNotBlank(input.getCode())) {
+            return imagesRepository.findByCode(input.getCode());
         }
+        if (StringUtils.isNotBlank(input.getFilename())) {
+            return imagesRepository.findByFilename(input.getFilename());
+        }
+        throw new BadInputException("Invalid image metadata: both code and filename are missing");
     }
+
 }

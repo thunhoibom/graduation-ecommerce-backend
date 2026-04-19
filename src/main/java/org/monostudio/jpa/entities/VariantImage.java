@@ -23,12 +23,12 @@ import jakarta.persistence.UniqueConstraint;
 
 @Entity
 @Table(
-    name = "product_images",
+    name = "variant_images",
     indexes = {
-        @Index(columnList = "product_id")
+        @Index(columnList = "variant_id")
     },
     uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"product_id", "image_id"})
+        @UniqueConstraint(columnNames = {"variant_id", "image_id"})
     })
 @Builder
 @NoArgsConstructor
@@ -37,23 +37,25 @@ import jakarta.persistence.UniqueConstraint;
 @Setter
 @EqualsAndHashCode
 @ToString
-public class ProductImage
+public class VariantImage
     implements DBEntity {
-    private static final long serialVersionUID = 12L;
+    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "product_image_id", nullable = false)
+    @Column(name = "variant_image_id", nullable = false)
     private Long id;
+
     @JoinColumn(name = "image_id", referencedColumnName = "image_id", updatable = false)
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     private Image image;
-    @JoinColumn(name = "product_id", referencedColumnName = "product_id", updatable = false)
+
+    @JoinColumn(name = "variant_id", referencedColumnName = "variant_id", updatable = false)
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
-    private Product product;
+    private ProductVariant variant;
 
     /**
-     * Display order for this image within the product's image gallery.
+     * Display order for this image within the variant's image gallery.
      * Lower numbers appear first. Default is 0.
      */
     @Column(name = "sort_order", nullable = false)
@@ -61,23 +63,21 @@ public class ProductImage
     private Integer sortOrder = 0;
 
     /**
-     * Whether this image is the primary/hero image for the product.
+     * Whether this image is the primary/hero image for the variant.
      * Used as thumbnail in listings, cart, emails, etc.
-     * Only one image per product should be marked as primary.
+     * Only one image per variant should be marked as primary.
      */
     @Column(name = "is_primary", nullable = false)
     @Builder.Default
     private Boolean isPrimary = false;
 
     /**
-     * Please note: this copy-constructor does NOT include a ProductImage's relationships
-     *
-     * @param source The original ProductImage
+     * Copy-constructor - does NOT copy relationships (set to null).
      */
-    public ProductImage(ProductImage source) {
+    public VariantImage(VariantImage source) {
         this.id = source.id;
         this.image = null;
-        this.product = null;
+        this.variant = null;
         this.sortOrder = source.sortOrder;
         this.isPrimary = source.isPrimary;
     }

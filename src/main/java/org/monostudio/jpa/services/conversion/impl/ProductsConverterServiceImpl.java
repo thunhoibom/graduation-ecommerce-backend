@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.ImagePojo;
 import org.monostudio.api.models.ProductCategoryPojo;
 import org.monostudio.api.models.ProductPojo;
+import org.monostudio.jpa.entities.Image;
 import org.monostudio.jpa.entities.Product;
 import org.monostudio.jpa.entities.ProductCategory;
 import org.monostudio.jpa.entities.ProductImage;
@@ -19,6 +20,7 @@ import org.monostudio.jpa.services.conversion.ProductCategoriesConverterService;
 import org.monostudio.jpa.services.conversion.ProductsConverterService;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -50,8 +52,10 @@ public class ProductsConverterServiceImpl
     @Override
     public ProductPojo convertToPojo(Product source) {
         ProductPojo target = ProductPojo.builder()
+            .id(source.getId())
             .name(source.getName())
             .barcode(source.getBarcode())
+
             .price(source.getPrice())
             .description(source.getDescription())
             .currentStock(source.getStockCurrent())
@@ -68,8 +72,16 @@ public class ProductsConverterServiceImpl
         // Populate review statistics
         populateReviewStats(source.getId(), target);
 
+        // Populate images
+        List<ProductImage> images = productImagesRepository.deepFindProductImagesByProductIdOrdered(source.getId());
+        if (images != null && !images.isEmpty()) {
+            target.setImages(convertImagesToPojo(images));
+            target.setPrimaryImageUrl(extractPrimaryImageUrl(images));
+        }
+
         return target;
     }
+
 
     /**
      * Populate review statistics for a product.
@@ -130,10 +142,29 @@ public class ProductsConverterServiceImpl
     @Override
     public Collection<ImagePojo> convertImagesToPojo(Collection<ProductImage> productImages) {
         return productImages.stream()
+            .sorted(java.util.Comparator.comparingInt(pi -> pi.getSortOrder() != null ? pi.getSortOrder() : 0))
             .map(ProductImage::getImage)
             .map(imagesConverterService::convertToPojo)
             .distinct()
             .collect(Collectors.toList());
+    }
+
+    @Override
+    public String extractPrimaryImageUrl(Collection<ProductImage> productImages) {
+        return productImages.stream()
+            .filter(pi -> Boolean.TRUE.equals(pi.getIsPrimary()))
+            .map(ProductImage::getImage)
+            .map(Image::getUrl)
+            .findFirst()
+            .orElse(
+                // Fallback: first image by sort order
+                productImages.stream()
+                    .sorted(java.util.Comparator.comparingInt(pi -> pi.getSortOrder() != null ? pi.getSortOrder() : 0))
+                    .map(ProductImage::getImage)
+                    .map(Image::getUrl)
+                    .findFirst()
+                    .orElse(null)
+            );
     }
 
 }

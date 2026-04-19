@@ -2,6 +2,7 @@ package org.monostudio.jpa.services.crud.impl;
 
 import com.querydsl.core.types.Predicate;
 import org.apache.commons.lang3.StringUtils;
+import org.monostudio.jpa.repositories.ProductsCategoriesRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,7 @@ public class ProductsCrudServiceImpl
     private final ProductsRepository productsRepository;
     private final ProductsConverterService productsConverterService;
     private final ProductImagesRepository productImagesRepository;
+    private final ProductsCategoriesRepository productsCategoriesRepository;
     private final ImagesCrudService imagesCrudService;
     private final Logger logger = LoggerFactory.getLogger(ProductsCrudServiceImpl.class);
 
@@ -45,6 +47,7 @@ public class ProductsCrudServiceImpl
         ProductsConverterService productsConverterService,
         ProductsPatchService productsPatchService,
         ProductImagesRepository productImagesRepository,
+        ProductsCategoriesRepository productsCategoriesRepository,
         ImagesCrudService imagesCrudService
     ) {
         super(productsRepository, productsConverterService, productsPatchService);
@@ -52,7 +55,9 @@ public class ProductsCrudServiceImpl
         this.productsConverterService = productsConverterService;
         this.imagesCrudService = imagesCrudService;
         this.productImagesRepository = productImagesRepository;
+        this.productsCategoriesRepository = productsCategoriesRepository;
     }
+
 
     @Transactional
     @Override
@@ -68,26 +73,57 @@ public class ProductsCrudServiceImpl
             List<ProductImage> persistentProductImages = productImagesRepository.saveAll(preparedImages);
             Collection<ImagePojo> targetPojoImages = productsConverterService.convertImagesToPojo(persistentProductImages);
             target.setImages(targetPojoImages);
+            target.setPrimaryImageUrl(productsConverterService.extractPrimaryImageUrl(persistentProductImages));
         }
         return target;
     }
 
     @Override
     public Optional<ProductPojo> update(ProductPojo input, Long id) throws EntityNotFoundException, BadInputException {
-        Product prepared = productsConverterService.convertToNewEntity(input);
-        prepared.setId(id);
-        Product persistent = productsRepository.saveAndFlush(prepared);
+        Product existing = productsRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException(ITEM_NOT_FOUND));
+
+        // Update fields manually to preserve collections (like variants) and other unmapped data
+        existing.setName(input.getName());
+        existing.setBarcode(input.getBarcode());
+        existing.setDescription(input.getDescription());
+        existing.setPrice(input.getPrice());
+
+        if (input.getCurrentStock() != null) {
+            existing.setStockCurrent(input.getCurrentStock());
+        }
+        if (input.getCriticalStock() != null) {
+            existing.setStockCritical(input.getCriticalStock());
+        }
+
+        if (input.getCategory() != null && StringUtils.isNotBlank(input.getCategory().getCode())) {
+            productsCategoriesRepository.findByCode(input.getCategory().getCode())
+                .ifPresent(existing::setProductCategory);
+        }
+
+        if (StringUtils.isNotBlank(input.getStatus())) {
+            try {
+                existing.setStatus(org.monostudio.jpa.entities.ProductStatus.valueOf(input.getStatus()));
+            } catch (IllegalArgumentException e) {
+                // Keep existing status if invalid
+            }
+        }
+
+        Product persistent = productsRepository.saveAndFlush(existing);
         ProductPojo target = productsConverterService.convertToPojo(persistent);
+
         productImagesRepository.deleteByProductId(id);
         Collection<ImagePojo> inputPojoImages = input.getImages();
-        if (inputPojoImages!=null && !inputPojoImages.isEmpty()) {
+        if (inputPojoImages != null && !inputPojoImages.isEmpty()) {
             List<ProductImage> preparedImages = this.makeProductImageRelationships(persistent, inputPojoImages);
             List<ProductImage> persistentProductImages = productImagesRepository.saveAll(preparedImages);
             Collection<ImagePojo> targetPojoImages = productsConverterService.convertImagesToPojo(persistentProductImages);
             target.setImages(targetPojoImages);
+            target.setPrimaryImageUrl(productsConverterService.extractPrimaryImageUrl(persistentProductImages));
         }
         return Optional.of(target);
     }
+
 
     @Override
     public ProductPojo readOne(Predicate filters)
@@ -98,9 +134,10 @@ public class ProductsCrudServiceImpl
         }
         Product found = entity.get();
         ProductPojo target = productsConverterService.convertToPojo(found);
-        List<ProductImage> productImages = productImagesRepository.deepFindProductImagesByProductId(found.getId());
+        List<ProductImage> productImages = productImagesRepository.deepFindProductImagesByProductIdOrdered(found.getId());
         Collection<ImagePojo> imagePojos = productsConverterService.convertImagesToPojo(productImages);
         target.setImages(imagePojos);
+        target.setPrimaryImageUrl(productsConverterService.extractPrimaryImageUrl(productImages));
         return target;
     }
 
@@ -124,23 +161,32 @@ public class ProductsCrudServiceImpl
      */
     private List<ProductImage> makeProductImageRelationships(Product existingProduct, Collection<ImagePojo> inputImages) {
         List<ProductImage> allRelationships = new ArrayList<>();
-        for (ImagePojo img : inputImages) {
-            try {
-                Optional<Image> match = imagesCrudService.getExisting(img);
-                Image image = match.orElseGet(() -> Image.builder()
-                    .code(img.getCode())
-                    .filename(img.getFilename())
-                    .url(img.getUrl())
-                    .build());
+        if (inputImages == null || inputImages.isEmpty()) {
+            return allRelationships;
+        }
+
+        // Only process the first image as requested (limit 1)
+        ImagePojo img = inputImages.iterator().next();
+        try {
+            Optional<Image> match = imagesCrudService.getExisting(img);
+            if (match.isPresent()) {
                 ProductImage relationship = ProductImage.builder()
                     .product(existingProduct)
-                    .image(image)
+                    .image(match.get())
+                    .sortOrder(0)
+                    .isPrimary(true)
                     .build();
                 allRelationships.add(relationship);
-            } catch (BadInputException ex) {
-                logger.debug("An image was not linked to product with barcode '{}'", existingProduct.getBarcode());
+            } else {
+                logger.warn("Image with code/filename '{}' not found in database. Skipping linkage to product '{}'",
+                    img.getCode() != null ? img.getCode() : img.getFilename(), existingProduct.getBarcode());
             }
+        } catch (BadInputException ex) {
+            logger.debug("An image was not linked to product with barcode '{}'", existingProduct.getBarcode());
         }
+        
         return allRelationships;
     }
+
+
 }

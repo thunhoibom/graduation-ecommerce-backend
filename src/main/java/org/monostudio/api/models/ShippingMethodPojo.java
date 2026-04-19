@@ -37,4 +37,7 @@ public class ShippingMethodPojo {
 
     @NotNull
     private Boolean active;
+
+    @Min(0)
+    private Integer pricePerKm;
 }

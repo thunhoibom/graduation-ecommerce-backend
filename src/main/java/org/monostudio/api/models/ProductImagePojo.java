@@ -6,25 +6,20 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import jakarta.validation.constraints.NotBlank;
-
 import static com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL;
 
+/**
+ * Wraps an ImagePojo with sort order and primary flag for product-level images.
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(NON_NULL)
-public class ImagePojo {
-    @NotBlank
-    private String code;
-    @NotBlank
-    private String filename;
-    @NotBlank
-    private String url;
-    private String altText;
-    private String mimeType;
-    private Integer width;
-    private Integer height;
-    private Long fileSize;
+public class ProductImagePojo {
+    private ImagePojo image;
+    @Builder.Default
+    private Integer sortOrder = 0;
+    @Builder.Default
+    private Boolean isPrimary = false;
 }

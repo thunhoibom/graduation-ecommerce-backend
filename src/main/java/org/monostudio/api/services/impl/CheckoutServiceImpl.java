@@ -17,6 +17,7 @@ import org.monostudio.api.services.CheckoutService;
 import org.monostudio.api.services.DiscountService;
 import org.monostudio.api.services.OrdersProcessService;
 import org.monostudio.api.services.StockReservationService;
+import org.monostudio.api.services.ShippingMethodsService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.CartItem;
 import org.monostudio.jpa.entities.CartSession;
@@ -70,6 +71,7 @@ public class CheckoutServiceImpl
     private final PaymentService paymentIntegrationService;
     private final StockReservationService stockReservationService;
     private final DiscountService discountService;
+    private final ShippingMethodsService shippingMethodsService;
     private final PaymentCallbackLogRepository paymentCallbackLogRepository;
 
     static final double TAX_PERCENT = 0.19;
@@ -89,6 +91,7 @@ public class CheckoutServiceImpl
         PaymentService paymentIntegrationService,
         StockReservationService stockReservationService,
         DiscountService discountService,
+        ShippingMethodsService shippingMethodsService,
         PaymentCallbackLogRepository paymentCallbackLogRepository
     ) {
         this.ordersCrudService = ordersCrudService;
@@ -104,6 +107,7 @@ public class CheckoutServiceImpl
         this.paymentIntegrationService = paymentIntegrationService;
         this.stockReservationService = stockReservationService;
         this.discountService = discountService;
+        this.shippingMethodsService = shippingMethodsService;
         this.paymentCallbackLogRepository = paymentCallbackLogRepository;
     }
 
@@ -171,8 +175,10 @@ public class CheckoutServiceImpl
         }
 
         // ── 5. Compute shipping fee ─────────────────────────────────────────────
-        // Base free-threshold check first
-        int shippingFee = computeShippingFee(shippingMethod, subtotal);
+        // Compute fee with distance tracking if applicable
+        Double lat = request.getShippingAddress() != null ? request.getShippingAddress().getLatitude() : null;
+        Double lng = request.getShippingAddress() != null ? request.getShippingAddress().getLongitude() : null;
+        int shippingFee = shippingMethodsService.computeRate(shippingMethod, subtotal, lat, lng).getFee();
 
         // ── 6. Validate discount (do NOT redeem here — redemption happens at markAsPaid) ──
         // Note: customerId is null here — per-customer limit check runs at markAsPaid
@@ -272,17 +278,6 @@ public class CheckoutServiceImpl
             .description(description)
             .variantId(variant.getId())
             .build();
-    }
-
-    /**
-     * Computes shipping fee: 0 if subtotal >= freeShippingThreshold, else baseFee.
-     * Note: FREE_SHIPPING discount type is handled separately in startCheckout().
-     */
-    private int computeShippingFee(ShippingMethod method, int subtotal) {
-        if (method.getFreeShippingThreshold() != null && subtotal >= method.getFreeShippingThreshold()) {
-            return 0;
-        }
-        return method.getBaseFee();
     }
 
     // ─── Legacy / unchanged methods below ─────────────────────────────────────

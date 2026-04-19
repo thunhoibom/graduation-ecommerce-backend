@@ -16,5 +16,5 @@ public interface ShippingMethodsService {
      * @param subtotal The cart subtotal in VND (may be null)
      * @return A ShippingRatePojo with the computed fee
      */
-    ShippingRatePojo computeRate(ShippingMethod method, Integer subtotal);
+    ShippingRatePojo computeRate(ShippingMethod method, Integer subtotal, Double dstLat, Double dstLng);
 }

@@ -17,6 +17,11 @@ public class ImagesConverterServiceImpl
             .code(source.getCode())
             .filename(source.getFilename())
             .url(source.getUrl())
+            .altText(source.getAltText())
+            .mimeType(source.getMimeType())
+            .width(source.getWidth())
+            .height(source.getHeight())
+            .fileSize(source.getFileSize())
             .build();
     }
 
@@ -26,6 +31,11 @@ public class ImagesConverterServiceImpl
             .code(source.getCode())
             .filename(source.getFilename())
             .url(source.getUrl())
+            .altText(source.getAltText())
+            .mimeType(source.getMimeType())
+            .width(source.getWidth())
+            .height(source.getHeight())
+            .fileSize(source.getFileSize())
             .build();
     }
 

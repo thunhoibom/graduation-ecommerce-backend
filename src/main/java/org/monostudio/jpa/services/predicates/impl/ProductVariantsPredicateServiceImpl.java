@@ -42,7 +42,7 @@ public class ProductVariantsPredicateServiceImpl
                     case "barcode":
                         predicate.and(BASE_PATH.barcode.eq(stringValue));
                         break;
-                    case "size":
+                    case "variantSize":
                         predicate.and(BASE_PATH.size.eq(stringValue));
                         break;
                     case "color":
@@ -57,8 +57,15 @@ public class ProductVariantsPredicateServiceImpl
                     case "productBarcode":
                         predicate.and(BASE_PATH.product.barcode.eq(stringValue));
                         break;
+                    case "page":
+                    case "size":
+                    case "sort":
+                    case "direction":
+                        // Ignore pagination and sorting params as they are handled elsewhere
+                        break;
                     default:
                         break;
+
                 }
             } catch (NumberFormatException exc) {
                 logger.info("Param '{}' couldn't be parsed as number (value: '{}')", paramName, stringValue);

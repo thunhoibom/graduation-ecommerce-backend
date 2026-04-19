@@ -14,6 +14,7 @@ import org.monostudio.jpa.entities.CartItem;
 import org.monostudio.jpa.entities.CartSession;
 import org.monostudio.jpa.entities.ProductVariant;
 import org.monostudio.jpa.repositories.CartItemsRepository;
+import org.monostudio.jpa.services.conversion.CartItemsConverterService;
 import org.monostudio.jpa.repositories.CartSessionsRepository;
 import org.monostudio.jpa.repositories.ProductVariantsRepository;
 
@@ -34,18 +35,21 @@ public class CartServiceImpl
     private final CartItemsRepository cartItemsRepository;
     private final ProductVariantsRepository productVariantsRepository;
     private final StockReservationService stockReservationService;
+    private final CartItemsConverterService cartItemsConverterService;
 
     @Autowired
     public CartServiceImpl(
         CartSessionsRepository cartSessionsRepository,
         CartItemsRepository cartItemsRepository,
         ProductVariantsRepository productVariantsRepository,
-        StockReservationService stockReservationService
+        StockReservationService stockReservationService,
+        CartItemsConverterService cartItemsConverterService
     ) {
         this.cartSessionsRepository = cartSessionsRepository;
         this.cartItemsRepository = cartItemsRepository;
         this.productVariantsRepository = productVariantsRepository;
         this.stockReservationService = stockReservationService;
+        this.cartItemsConverterService = cartItemsConverterService;
     }
 
     // ─── Session management ─────────────────────────────────────────────────────
@@ -285,11 +289,8 @@ public class CartServiceImpl
 
     private CartItemPojo toItemPojo(CartItem item) {
         ProductVariant variant = item.getVariant();
-        int unitPrice = 0;
-        if (variant != null && variant.getProduct() != null) {
-            unitPrice = variant.getProduct().getPrice() + variant.getPriceModifier();
-        }
-        int lineTotal = unitPrice * item.getQuantity();
+        CartItemPojo pojo = cartItemsConverterService.convertToPojo(item);
+
         Integer availableStock = null;
         if (variant != null) {
             availableStock = stockReservationService.getAvailableStock(variant.getSku());
@@ -297,26 +298,11 @@ public class CartServiceImpl
         boolean inStock = availableStock != null && availableStock >= item.getQuantity();
         boolean active = variant != null && variant.isActive();
 
-        return CartItemPojo.builder()
-            .id(item.getId())
-            .variantSkuResolved(variant != null ? variant.getSku() : null)
-            .variantSize(variant != null ? variant.getSize() : null)
-            .variantColor(variant != null ? variant.getColor() : null)
-            .productName(variant != null && variant.getProduct() != null
-                ? variant.getProduct().getName() : null)
-            .productBarcode(variant != null && variant.getProduct() != null
-                ? variant.getProduct().getBarcode() : null)
-            .productBasePrice(variant != null && variant.getProduct() != null
-                ? variant.getProduct().getPrice() : null)
-            .priceModifier(variant != null ? variant.getPriceModifier() : null)
-            .unitPrice(unitPrice)
-            .lineTotal(lineTotal)
-            .quantity(item.getQuantity())
-            .availableStock(availableStock)
-            .inStock(inStock)
-            .active(active)
-            .addedAt(item.getAddedAt())
-            .updatedAt(item.getUpdatedAt())
-            .build();
+        pojo.setProductBasePrice(variant != null && variant.getProduct() != null ? variant.getProduct().getPrice() : null);
+        pojo.setAvailableStock(availableStock);
+        pojo.setInStock(inStock);
+        pojo.setActive(active);
+
+        return pojo;
     }
 }

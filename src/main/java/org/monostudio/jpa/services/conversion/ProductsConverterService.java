@@ -11,4 +11,10 @@ import java.util.Collection;
 public interface ProductsConverterService
     extends ConverterService<ProductPojo, Product> {
     Collection<ImagePojo> convertImagesToPojo(Collection<ProductImage> productImages);
+
+    /**
+     * Extracts the primary image URL from a list of ProductImages.
+     * Returns null if no primary image is set.
+     */
+    String extractPrimaryImageUrl(Collection<ProductImage> productImages);
 }

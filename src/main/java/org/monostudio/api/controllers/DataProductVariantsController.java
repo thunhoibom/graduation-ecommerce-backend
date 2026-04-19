@@ -62,8 +62,10 @@ public class DataProductVariantsController
     @PostMapping
     @Operation(summary = "Define a new product variant.")
     @ResponseStatus(CREATED)
-    @PreAuthorize("hasAuthority('productVariants:create')")
-    public void create( ProductVariantPojo input)
+    @PreAuthorize("hasAuthority('products:create')")
+
+    public void create(@RequestBody @Valid ProductVariantPojo input)
+
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -71,8 +73,10 @@ public class DataProductVariantsController
     @PutMapping("/{id}")
     @Operation(summary = "Replace product variant data.")
     @ResponseStatus(NO_CONTENT)
-    @PreAuthorize("hasAuthority('productVariants:update')")
-    public void update(ProductVariantPojo input, @PathVariable Long id)
+    @PreAuthorize("hasAuthority('products:update')")
+
+    public void update(@RequestBody @Valid ProductVariantPojo input, @PathVariable Long id)
+
         throws BadInputException, EntityNotFoundException {
         crudService.update(input, id);
     }
@@ -80,7 +84,8 @@ public class DataProductVariantsController
     @PatchMapping("/{id}")
     @Operation(summary = "Update parts of product variant data.")
     @ResponseStatus(NO_CONTENT)
-    @PreAuthorize("hasAuthority('productVariants:update')")
+    @PreAuthorize("hasAuthority('products:update')")
+
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
         @PathVariable Long id
@@ -92,7 +97,8 @@ public class DataProductVariantsController
     @DeleteMapping("/{id}")
     @Operation(summary = "Remove product variants.")
     @ResponseStatus(NO_CONTENT)
-    @PreAuthorize("hasAuthority('productVariants:delete')")
+    @PreAuthorize("hasAuthority('products:delete')")
+
     public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
         crudService.delete(id);

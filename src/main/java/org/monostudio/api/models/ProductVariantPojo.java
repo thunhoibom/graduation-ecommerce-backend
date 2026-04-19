@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
+import java.util.Collection;
 
 import static com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL;
 
@@ -72,4 +73,10 @@ public class ProductVariantPojo {
 
     /** Read-only: creation timestamp. */
     private LocalDateTime createdAt;
+
+    /** Images specific to this variant, e.g. color-specific photos. */
+    private Collection<ImagePojo> images;
+
+    /** URL of the primary image for this variant. Read-only convenience field. */
+    private String primaryImageUrl;
 }

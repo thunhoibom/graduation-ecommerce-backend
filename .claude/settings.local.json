@@ -21,7 +21,12 @@
       "Bash(set PATH=C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-21.0.10\\\\bin)",
       "Bash(%PATH%)",
       "Read(//d D:/GRADUATION_PROJECT/graduation_ecommerce/**)",
-      "WebSearch"
+      "WebSearch",
+      "Read(//mnt/d/GRADUATION_PROJECT/**)",
+      "Read(//mnt/d/**)",
+      "Read(//mnt/**)",
+      "Bash(ls /home/)",
+      "Read(//c/Users/Nguyen/**)"
     ]
   }
 }

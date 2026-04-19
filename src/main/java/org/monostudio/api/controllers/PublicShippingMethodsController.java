@@ -41,11 +41,13 @@ public class PublicShippingMethodsController {
     @GetMapping("/methods")
     @Operation(summary = "List active shipping methods with computed fees")
     public List<ShippingRatePojo> getShippingMethods(
-        @RequestParam(required = false) Integer subtotal
+        @RequestParam(required = false) Integer subtotal,
+        @RequestParam(required = false) Double latitude,
+        @RequestParam(required = false) Double longitude
     ) {
         List<ShippingMethod> activeMethods = shippingMethodsRepository.findByActiveTrue();
         return activeMethods.stream()
-            .map(method -> shippingMethodsService.computeRate(method, subtotal))
+            .map(method -> shippingMethodsService.computeRate(method, subtotal, latitude, longitude))
             .collect(Collectors.toList());
     }
 }

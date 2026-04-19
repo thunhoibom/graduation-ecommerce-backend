@@ -65,6 +65,10 @@ public class Address
     @Size(max = 50)
     @Column(name = "address_notes")
     private String notes;
+    @Column(name = "latitude")
+    private Double latitude;
+    @Column(name = "longitude")
+    private Double longitude;
 
     public Address(Address source) {
         this.id = source.id;
@@ -74,5 +78,7 @@ public class Address
         this.secondLine = source.secondLine;
         this.postalCode = source.postalCode;
         this.notes = source.notes;
+        this.latitude = source.latitude;
+        this.longitude = source.longitude;
     }
 }

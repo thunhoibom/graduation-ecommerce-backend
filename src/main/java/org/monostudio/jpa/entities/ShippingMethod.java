@@ -45,6 +45,8 @@ public class ShippingMethod
     private int estimatedDaysMax;
     @Column(name = "shipping_method_active", nullable = false)
     private boolean active;
+    @Column(name = "shipping_method_price_per_km")
+    private Integer pricePerKm;
 
     /**
      * Copy-constructor.
@@ -59,5 +61,6 @@ public class ShippingMethod
         this.estimatedDaysMin = source.estimatedDaysMin;
         this.estimatedDaysMax = source.estimatedDaysMax;
         this.active = source.active;
+        this.pricePerKm = source.pricePerKm;
     }
 }

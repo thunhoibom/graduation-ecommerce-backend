@@ -23,6 +23,9 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
 
 @Entity
 @Table(
@@ -106,8 +109,10 @@ public class ProductVariant
     private int stockReserved = 0;
 
     @Version
+    @Builder.Default
     @Column(name = "variant_version")
-    private Long version;
+    private Long version = 0L;
+
 
     /**
      * Whether this variant is active and available for purchase.
@@ -126,9 +131,14 @@ public class ProductVariant
     @ManyToOne(fetch = FetchType.LAZY)
     private Product product;
 
+    @Builder.Default
+    @jakarta.persistence.OneToMany(mappedBy = "variant", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<VariantImage> images = new java.util.ArrayList<>();
+
     @CreationTimestamp
     @Column(name = "variant_created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
 
     /**
      * Copy-constructor — does NOT copy the product relationship (set to null).
