@@ -27,7 +27,7 @@ public class MediaController {
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload an image to MinIO and save to database")
-    @PreAuthorize("hasAuthority('images:create')")
+    @PreAuthorize("isAuthenticated()")
     public ImagePojo uploadImage(@RequestParam("file") MultipartFile file) throws BadInputException {
         ImagePojo uploaded = storageService.uploadImage(file);
         // Save to database

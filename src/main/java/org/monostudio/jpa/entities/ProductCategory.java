@@ -50,6 +50,10 @@ public class ProductCategory
     @ManyToOne(fetch = FetchType.LAZY)
     private ProductCategory parent;
 
+    @JoinColumn(name = "image_id", referencedColumnName = "image_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    private Image image;
+
     /**
      * Please note: this copy-constructor does NOT include a ProductCategory's relationship to its parent.
      *

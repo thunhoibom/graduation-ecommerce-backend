@@ -122,7 +122,7 @@ public class CheckoutServiceImpl
      * 6. Validate discount code via DiscountService (increments use count on success)
      * 7. Build OrderPojo with correct transportValue
      * 8. Create order in PENDING status
-     * 9. Return payment URL (Webpay Plus)
+     * 9. Return payment URL (VNPAY)
      */
     @Override
     @Transactional

@@ -310,6 +310,51 @@ public class ReturnRequestServiceImpl
         return buildReturnRequestPojo(saved, items);
     }
 
+    @Override
+    public ReturnRequestPojo startRefund(Long id, String adminNotes)
+        throws EntityNotFoundException, BadInputException {
+        ReturnRequest existing = returnRequestsRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Return request not found: " + id));
+
+        // Allow start refund from APPROVED or RECEIVED states
+        if (existing.getStatus() != ReturnRequest.ReturnRequestStatus.APPROVED
+            && existing.getStatus() != ReturnRequest.ReturnRequestStatus.RECEIVED) {
+            throw new BadInputException(INVALID_STATE);
+        }
+
+        existing.setStatus(ReturnRequest.ReturnRequestStatus.REFUND_PROCESSING);
+        if (adminNotes != null) {
+            String existingNotes = existing.getAdminNotes();
+            existing.setAdminNotes(existingNotes == null ? adminNotes : existingNotes + "\n" + adminNotes);
+        }
+
+        ReturnRequest saved = returnRequestsRepository.saveAndFlush(existing);
+        List<ReturnRequestItem> items = itemsRepository.findByReturnRequestId(id);
+        ReturnRequestPojo pojo = buildReturnRequestPojo(saved, items);
+        try {
+            mailingService.notifyReturnRequestStatusToClient(pojo);
+        } catch (MailingServiceException e) {
+            logger.warn("Failed to send refund start notification: {}", e.getMessage());
+        }
+        return pojo;
+    }
+
+    @Override
+    public ReturnRequestPojo addNote(Long id, String note)
+        throws EntityNotFoundException, BadInputException {
+        if (note == null || note.isBlank()) {
+            throw new BadInputException("Note content cannot be empty");
+        }
+        ReturnRequest existing = returnRequestsRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Return request not found: " + id));
+
+        String existingNotes = existing.getAdminNotes();
+        existing.setAdminNotes(existingNotes == null ? note : existingNotes + "\n" + note);
+        ReturnRequest saved = returnRequestsRepository.saveAndFlush(existing);
+        List<ReturnRequestItem> items = itemsRepository.findByReturnRequestId(id);
+        return buildReturnRequestPojo(saved, items);
+    }
+
     /**
      * Restores stock when returned goods are received at the warehouse.
      *

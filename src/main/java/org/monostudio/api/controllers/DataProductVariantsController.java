@@ -5,21 +5,14 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.monostudio.api.DataCrudGenericController;
+import org.monostudio.api.models.BulkOperationResult;
 import org.monostudio.api.models.DataPagePojo;
+import org.monostudio.api.models.ProductCsvImportResult;
 import org.monostudio.api.models.ProductVariantPojo;
 import org.monostudio.api.services.PaginationService;
+import org.monostudio.api.services.VariantsBulkService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.ProductVariant;
 import org.monostudio.jpa.services.SortSpecParserService;
@@ -30,6 +23,8 @@ import org.monostudio.jpa.sortspecs.ProductVariantsSortSpec;
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
+import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.CREATED;
@@ -41,14 +36,18 @@ import static org.springframework.http.HttpStatus.NO_CONTENT;
 public class DataProductVariantsController
     extends DataCrudGenericController<ProductVariantPojo, ProductVariant> {
 
+    private final VariantsBulkService variantsBulkService;
+
     @Autowired
     public DataProductVariantsController(
         PaginationService paginationService,
         SortSpecParserService sortService,
         ProductVariantsCrudService crudService,
-        ProductVariantsPredicateService predicateService
+        ProductVariantsPredicateService predicateService,
+        VariantsBulkService variantsBulkService
     ) {
         super(paginationService, sortService, crudService, predicateService);
+        this.variantsBulkService = variantsBulkService;
     }
 
     @Override
@@ -107,5 +106,62 @@ public class DataProductVariantsController
     @Override
     protected Map<String, OrderSpecifier<?>> getOrderSpecMap() {
         return ProductVariantsSortSpec.ORDER_SPEC_MAP;
+    }
+
+    // ─── Bulk Operations ────────────────────────────────────────────────────────
+
+    /**
+     * Export all product variants as a CSV file.
+     */
+    @GetMapping("/export")
+    @Operation(summary = "Export variants as CSV")
+    @PreAuthorize("hasAuthority('products:read')")
+    public byte[] exportVariants(
+        @RequestParam(required = false) String productBarcode
+    ) throws IOException {
+        return variantsBulkService.exportVariants(productBarcode);
+    }
+
+    /**
+     * Bulk-activate (enable) multiple variants at once.
+     */
+    @PostMapping("/bulk-activate")
+    @Operation(summary = "Bulk-activate variants")
+    @PreAuthorize("hasAuthority('products:update')")
+    public BulkOperationResult bulkActivate(@RequestBody List<Long> ids) {
+        return variantsBulkService.bulkActivate(ids);
+    }
+
+    /**
+     * Bulk-deactivate (disable) multiple variants at once.
+     */
+    @PostMapping("/bulk-deactivate")
+    @Operation(summary = "Bulk-deactivate variants")
+    @PreAuthorize("hasAuthority('products:update')")
+    public BulkOperationResult bulkDeactivate(@RequestBody List<Long> ids) {
+        return variantsBulkService.bulkDeactivate(ids);
+    }
+
+    /**
+     * Bulk-delete multiple variants at once.
+     */
+    @PostMapping("/bulk-delete")
+    @Operation(summary = "Bulk-delete variants")
+    @PreAuthorize("hasAuthority('products:delete')")
+    public BulkOperationResult bulkDeleteVariants(@RequestBody List<Long> ids) {
+        return variantsBulkService.bulkDelete(ids);
+    }
+
+    /**
+     * Import product variants from a CSV file.
+     * Each row creates (or updates if SKU exists) one ProductVariant.
+     */
+    @PostMapping(value = "/import", consumes = "multipart/form-data")
+    @Operation(summary = "Import variants from CSV")
+    @PreAuthorize("hasAuthority('products:create')")
+    public ProductCsvImportResult importVariants(
+        @RequestPart("file") org.springframework.web.multipart.MultipartFile file
+    ) throws IOException {
+        return variantsBulkService.importVariants(file);
     }
 }

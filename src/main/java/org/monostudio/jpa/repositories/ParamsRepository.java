@@ -1,5 +1,6 @@
 package org.monostudio.jpa.repositories;
 
+import java.util.Optional;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.monostudio.jpa.Repository;
@@ -11,4 +12,6 @@ public interface ParamsRepository
     @Query("SELECT p FROM Param p WHERE p.category = :category")
     Iterable<org.monostudio.jpa.entities.Param> findParamsByCategory(
         @Param("category") String category);
+
+    Optional<org.monostudio.jpa.entities.Param> findByCategoryAndName(String category, String name);
 }

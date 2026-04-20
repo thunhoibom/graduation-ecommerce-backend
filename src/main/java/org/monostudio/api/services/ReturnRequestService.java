@@ -87,4 +87,29 @@ public interface ReturnRequestService {
      */
     ReturnRequestPojo cancelReturnRequest(Long id)
         throws EntityNotFoundException, BadInputException;
+
+    /**
+     * Starts the refund process for a return request.
+     * Transitions the request to REFUND_PROCESSING.
+     *
+     * @param id Return request ID
+     * @param adminNotes Optional admin notes
+     * @return The updated return request
+     * @throws EntityNotFoundException When the return request is not found
+     * @throws BadInputException When the return request is not in a valid state
+     */
+    ReturnRequestPojo startRefund(Long id, String adminNotes)
+        throws EntityNotFoundException, BadInputException;
+
+    /**
+     * Adds an admin note to a return request.
+     *
+     * @param id Return request ID
+     * @param note The note to add
+     * @return The updated return request
+     * @throws EntityNotFoundException When the return request is not found
+     * @throws BadInputException When the return request is not in a valid state
+     */
+    ReturnRequestPojo addNote(Long id, String note)
+        throws EntityNotFoundException, BadInputException;
 }

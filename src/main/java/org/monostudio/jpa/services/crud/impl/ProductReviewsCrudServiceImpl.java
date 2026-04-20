@@ -1,5 +1,10 @@
 package org.monostudio.jpa.services.crud.impl;
 
+import org.monostudio.api.models.ProductReviewReplyPojo;
+import org.monostudio.jpa.entities.ProductReviewReply;
+import org.monostudio.jpa.entities.User;
+import org.monostudio.jpa.repositories.ProductReviewReplyRepository;
+import org.monostudio.jpa.repositories.UsersRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +38,8 @@ public class ProductReviewsCrudServiceImpl
     private final ProductsRepository productsRepository;
     private final CustomersRepository customersRepository;
     private final OrdersRepository ordersRepository;
+    private final ProductReviewReplyRepository productReviewReplyRepository;
+    private final UsersRepository usersRepository;
 
     @Autowired
     public ProductReviewsCrudServiceImpl(
@@ -41,7 +48,9 @@ public class ProductReviewsCrudServiceImpl
         ProductReviewsPatchService productReviewsPatchService,
         ProductsRepository productsRepository,
         CustomersRepository customersRepository,
-        OrdersRepository ordersRepository
+        OrdersRepository ordersRepository,
+        ProductReviewReplyRepository productReviewReplyRepository,
+        UsersRepository usersRepository
     ) {
         super(productReviewsRepository, productReviewsConverterService, productReviewsPatchService);
         this.productReviewsRepository = productReviewsRepository;
@@ -49,6 +58,65 @@ public class ProductReviewsCrudServiceImpl
         this.productsRepository = productsRepository;
         this.customersRepository = customersRepository;
         this.ordersRepository = ordersRepository;
+        this.productReviewReplyRepository = productReviewReplyRepository;
+        this.usersRepository = usersRepository;
+    }
+
+    /**
+     * Submit a reply to a review as a customer.
+     */
+    @Transactional
+    public ProductReviewReplyPojo createReply(Long reviewId, String body, Long customerId) throws BadInputException {
+        ProductReview review = productReviewsRepository.findById(reviewId)
+            .orElseThrow(() -> new EntityNotFoundException("Review not found"));
+        Customer customer = customersRepository.findById(customerId)
+            .orElseThrow(() -> new EntityNotFoundException("Customer not found"));
+
+        ProductReviewReply reply = ProductReviewReply.builder()
+            .review(review)
+            .customer(customer)
+            .body(body)
+            .build();
+
+        ProductReviewReply saved = productReviewReplyRepository.saveAndFlush(reply);
+        return mapReplyToPojo(saved);
+    }
+
+    /**
+     * Submit a reply to a review as a staff member (User).
+     */
+    @Transactional
+    public ProductReviewReplyPojo createReplyAdmin(Long reviewId, String body, Long userId) throws BadInputException {
+        ProductReview review = productReviewsRepository.findById(reviewId)
+            .orElseThrow(() -> new EntityNotFoundException("Review not found"));
+        User user = usersRepository.findById(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User not found"));
+
+        ProductReviewReply reply = ProductReviewReply.builder()
+            .review(review)
+            .user(user)
+            .body(body)
+            .build();
+
+        ProductReviewReply saved = productReviewReplyRepository.saveAndFlush(reply);
+        return mapReplyToPojo(saved);
+    }
+
+    private ProductReviewReplyPojo mapReplyToPojo(ProductReviewReply reply) {
+        String authorName = "Người dùng";
+        if (reply.getUser() != null && reply.getUser().getPerson() != null) {
+            authorName = (reply.getUser().getPerson().getFirstName() + " " + reply.getUser().getPerson().getLastName()).trim();
+        } else if (reply.getCustomer() != null && reply.getCustomer().getPerson() != null) {
+            authorName = (reply.getCustomer().getPerson().getFirstName() + " " + reply.getCustomer().getPerson().getLastName()).trim();
+        }
+
+        return ProductReviewReplyPojo.builder()
+            .id(reply.getId())
+            .body(reply.getBody())
+            .authorName(authorName)
+            .isStaff(reply.getUser() != null)
+            .createdAt(reply.getCreatedAt())
+            .build();
     }
 
     /**

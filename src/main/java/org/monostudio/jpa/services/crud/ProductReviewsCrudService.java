@@ -1,6 +1,7 @@
 package org.monostudio.jpa.services.crud;
 
 import org.monostudio.api.models.ProductReviewPojo;
+import org.monostudio.api.models.ProductReviewReplyPojo;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.ProductReview;
 import org.monostudio.jpa.services.CrudService;
@@ -15,6 +16,16 @@ public interface ProductReviewsCrudService
      * Submit a new product review for the given customer.
      */
     ProductReviewPojo createReview(ProductReviewPojo input, Long customerId) throws BadInputException;
+
+    /**
+     * Submit a reply to a review as a customer.
+     */
+    ProductReviewReplyPojo createReply(Long reviewId, String body, Long customerId) throws BadInputException;
+
+    /**
+     * Submit a reply to a review as a staff member (User).
+     */
+    ProductReviewReplyPojo createReplyAdmin(Long reviewId, String body, Long userId) throws BadInputException;
 
     /**
      * Public: list approved reviews for a product by product ID.

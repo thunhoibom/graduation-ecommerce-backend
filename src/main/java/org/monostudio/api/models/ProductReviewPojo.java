@@ -12,6 +12,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
+import java.util.List;
+
 import static com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL;
 
 @Data
@@ -47,6 +49,15 @@ public class ProductReviewPojo {
 
     /** Read-only: reviewer's full name */
     private String reviewerName;
+
+    /** Read-only: media associated with this review */
+    private List<String> imageUrls;
+
+    /** Write-only: image IDs for new review submission */
+    private List<Long> imageIds;
+
+    /** Threaded conversations on this review */
+    private List<ProductReviewReplyPojo> replies;
 
     /** Read-only: creation timestamp */
     private LocalDateTime createdAt;

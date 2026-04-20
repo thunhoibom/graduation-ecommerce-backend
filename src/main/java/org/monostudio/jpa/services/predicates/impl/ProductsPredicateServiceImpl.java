@@ -65,6 +65,28 @@ public class ProductsPredicateServiceImpl
                             logger.info("Invalid status value: '{}' — ignoring filter", stringValue);
                         }
                         break;
+                    case "minPrice":
+                        predicate.and(basePath.price.goe(Integer.parseInt(stringValue)));
+                        break;
+                    case "maxPrice":
+                        predicate.and(basePath.price.loe(Integer.parseInt(stringValue)));
+                        break;
+                    case "inStock":
+                        if (Boolean.parseBoolean(stringValue)) {
+                            predicate.and(basePath.stockCurrent.gt(0));
+                        }
+                        break;
+                    case "query":
+                        predicate.and(basePath.name.containsIgnoreCase(stringValue)
+                            .or(basePath.description.containsIgnoreCase(stringValue))
+                            .or(basePath.productCategory.name.containsIgnoreCase(stringValue)));
+                        break;
+                    case "color":
+                        predicate.and(basePath.variants.any().color.equalsIgnoreCase(stringValue));
+                        break;
+                    case "size":
+                        predicate.and(basePath.variants.any().size.equalsIgnoreCase(stringValue));
+                        break;
                     default:
                         break;
                 }

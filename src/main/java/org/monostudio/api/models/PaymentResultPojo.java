@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class PaymentResultPojo {
     /**
-     * Gateway response code. 0 = success (Webpay Plus).
+     * Gateway response code. 0 = success (VNPAY/COD).
      */
     private int responseCode;
 

@@ -134,10 +134,10 @@ public class VnpayPaymentServiceImpl implements PaymentService {
         // Sandbox mock: return success
         RefundResultPojo refundResult = new RefundResultPojo();
         refundResult.setSuccess(true);
-        refundResult.setResponseCode("00");
+        refundResult.setResponseCode(0);
         refundResult.setType("VNPAY_SANDBOX_REFUND");
         // Balance left unknown/mocked
-        refundResult.setBalance(0);
+        refundResult.setBalance(0L);
         return refundResult;
     }
 }

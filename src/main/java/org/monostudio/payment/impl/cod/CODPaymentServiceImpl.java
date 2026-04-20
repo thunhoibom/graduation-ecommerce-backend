@@ -8,7 +8,7 @@ import org.monostudio.api.models.PaymentResultPojo;
 import org.monostudio.api.models.RefundResultPojo;
 import org.monostudio.payment.PaymentService;
 import org.monostudio.payment.PaymentServiceException;
-import org.monostudio.payment.impl.webpayplus.WebpayplusPaymentProperties;
+import org.monostudio.payment.impl.vnpay.VnpayConfig;
 
 import java.util.UUID;
 
@@ -20,11 +20,11 @@ import java.util.UUID;
 public class CODPaymentServiceImpl
     implements PaymentService {
 
-    private final WebpayplusPaymentProperties properties;
+    private final VnpayConfig config;
 
     @Autowired
-    public CODPaymentServiceImpl(WebpayplusPaymentProperties properties) {
-        this.properties = properties;
+    public CODPaymentServiceImpl(VnpayConfig config) {
+        this.config = config;
     }
 
     @Override
@@ -52,7 +52,7 @@ public class CODPaymentServiceImpl
 
     @Override
     public String getPaymentResultPageUrl() {
-        return properties.getBrowserRedirectionUrl();
+        return config.getBrowserRedirectionUrl();
     }
 
     @Override

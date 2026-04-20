@@ -14,6 +14,7 @@ public class ImagesConverterServiceImpl
     @Override
     public ImagePojo convertToPojo(Image source) {
         return ImagePojo.builder()
+            .id(source.getId())
             .code(source.getCode())
             .filename(source.getFilename())
             .url(source.getUrl())

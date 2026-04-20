@@ -1,5 +1,6 @@
 package org.monostudio.jpa.entities;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -11,16 +12,6 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.monostudio.jpa.DBEntity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
@@ -106,8 +97,14 @@ public class ProductReview
     @Column(name = "review_updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @   OneToMany(mappedBy = "review", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<ReviewImage> images;
+
+    @OneToMany(mappedBy = "review", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<ProductReviewReply> replies;
+
     /**
-     * Copy-constructor — does NOT copy Product or Customer relationship (set to null).
+     * Copy-constructor — does NOT copy Product, Customer, images or replies relationship (set to null).
      *
      * @param source The original ProductReview
      */
@@ -120,6 +117,8 @@ public class ProductReview
         this.verifiedPurchase = source.verifiedPurchase;
         this.product = null;
         this.customer = null;
+        this.images = null;
+        this.replies = null;
         this.createdAt = source.createdAt;
         this.updatedAt = source.updatedAt;
     }

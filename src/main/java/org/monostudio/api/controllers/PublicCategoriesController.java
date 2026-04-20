@@ -103,6 +103,7 @@ public class PublicCategoriesController {
             .code(entity.getCode())
             .name(entity.getName())
             .parent(parentPojo)
+            .imageUrl(entity.getImage() != null ? entity.getImage().getUrl() : null)
             .children(new ArrayList<>())
             .build();
 

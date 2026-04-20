@@ -16,6 +16,7 @@ import static com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL;
 @AllArgsConstructor
 @JsonInclude(NON_NULL)
 public class ImagePojo {
+    private Long id;
     @NotBlank
     private String code;
     @NotBlank

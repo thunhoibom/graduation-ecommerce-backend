@@ -40,7 +40,7 @@ public class CheckoutStartRequest {
     /** Shipping address for the order. */
     private AddressPojo shippingAddress;
 
-    /** Payment type name (e.g. "Webpay Plus"). */
+    /** Payment type name (e.g. "VNPAY", "COD"). */
     @NotBlank
     private String paymentType;
 

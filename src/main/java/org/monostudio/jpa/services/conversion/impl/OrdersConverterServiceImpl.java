@@ -291,7 +291,7 @@ public class OrdersConverterServiceImpl
             // Normalize common aliases
             if (paymentType.equalsIgnoreCase("COD")) {
                 paymentType = "COD";
-            } else if (paymentType.equalsIgnoreCase("VNPAY") || paymentType.equalsIgnoreCase("WebPay Plus")) {
+            } else if (paymentType.equalsIgnoreCase("VNPAY")) {
                 paymentType = "VNPAY";
             }
 

@@ -5,21 +5,15 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.monostudio.api.DataCrudGenericController;
+import org.monostudio.api.models.BulkOperationResult;
 import org.monostudio.api.models.DataPagePojo;
+import org.monostudio.api.models.ProductCsvImportResult;
 import org.monostudio.api.models.ProductPojo;
+import org.monostudio.api.services.BulkOperationsService;
 import org.monostudio.api.services.PaginationService;
+import org.monostudio.api.services.ProductsBulkService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Product;
 import org.monostudio.jpa.entities.ProductStatus;
@@ -32,6 +26,8 @@ import org.monostudio.jpa.sortspecs.ProductsSortSpec;
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
+import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.CREATED;
@@ -44,6 +40,8 @@ public class DataProductsController
     extends DataCrudGenericController<ProductPojo, Product> {
 
     private final ProductsRepository productsRepository;
+    private final ProductsBulkService productsBulkService;
+    private final BulkOperationsService bulkOperationsService;
 
     @Autowired
     public DataProductsController(
@@ -51,10 +49,14 @@ public class DataProductsController
         SortSpecParserService sortService,
         ProductsCrudService crudService,
         ProductsPredicateService predicateService,
-        ProductsRepository productsRepository
+        ProductsRepository productsRepository,
+        ProductsBulkService productsBulkService,
+        BulkOperationsService bulkOperationsService
     ) {
         super(paginationService, sortService, crudService, predicateService);
         this.productsRepository = productsRepository;
+        this.productsBulkService = productsBulkService;
+        this.bulkOperationsService = bulkOperationsService;
     }
 
     @Override
@@ -162,5 +164,82 @@ public class DataProductsController
         product.setStatus(ProductStatus.DRAFT);
         productsRepository.saveAndFlush(product);
         return crudService.findById(id);
+    }
+
+    // ─── Bulk Operations ────────────────────────────────────────────────────────
+
+    /**
+     * Export all products as a CSV file.
+     *
+     * @param categoryCode Optional category code to filter products
+     * @return CSV file as binary download
+     * @throws IOException On export error
+     */
+    @GetMapping("/export")
+    @Operation(summary = "Export products as CSV")
+    @PreAuthorize("hasAuthority('products:read')")
+    public byte[] exportProducts(
+        @RequestParam(required = false) String categoryCode
+    ) throws IOException {
+        byte[] csv = productsBulkService.exportProducts(categoryCode);
+        return csv;
+    }
+
+    /**
+     * Bulk-publish multiple products at once.
+     *
+     * @param ids Product IDs to publish
+     * @return Result with success/error counts
+     */
+    @PostMapping("/bulk-publish")
+    @Operation(summary = "Bulk-publish products")
+    @PreAuthorize("hasAuthority('products:update')")
+    public BulkOperationResult bulkPublish(@RequestBody List<Long> ids)
+        throws BadInputException {
+        return bulkOperationsService.bulkPublish(ids);
+    }
+
+    /**
+     * Bulk-unpublish multiple products at once.
+     *
+     * @param ids Product IDs to unpublish
+     * @return Result with success/error counts
+     */
+    @PostMapping("/bulk-unpublish")
+    @Operation(summary = "Bulk-unpublish products")
+    @PreAuthorize("hasAuthority('products:update')")
+    public BulkOperationResult bulkUnpublish(@RequestBody List<Long> ids)
+        throws BadInputException {
+        return bulkOperationsService.bulkUnpublish(ids);
+    }
+
+    /**
+     * Bulk-delete multiple products at once.
+     *
+     * @param ids Product IDs to delete
+     * @return Result with success/error counts
+     */
+    @PostMapping("/bulk-delete")
+    @Operation(summary = "Bulk-delete products")
+    @PreAuthorize("hasAuthority('products:delete')")
+    public BulkOperationResult bulkDelete(@RequestBody List<Long> ids)
+        throws BadInputException {
+        return bulkOperationsService.bulkDelete(ids);
+    }
+
+    /**
+     * Import products from a CSV file.
+     *
+     * @param file CSV file uploaded by admin
+     * @return Import result with success/error counts and per-row error details
+     * @throws IOException On file read error
+     */
+    @PostMapping(value = "/import", consumes = "multipart/form-data")
+    @Operation(summary = "Import products from CSV")
+    @PreAuthorize("hasAuthority('products:create')")
+    public ProductCsvImportResult importProducts(
+        @RequestPart("file") org.springframework.web.multipart.MultipartFile file
+    ) throws IOException {
+        return productsBulkService.importProducts(file);
     }
 }

@@ -102,6 +102,13 @@
       <classifier>jakarta</classifier>
     </dependency>
 
+    <!-- Utilities -->
+    <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-csv</artifactId>
+        <version>1.10.0</version>
+    </dependency>
+
     <!-- Security / Auth -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

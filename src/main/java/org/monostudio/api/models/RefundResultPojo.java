@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 
 /**
  * Result from a payment gateway refund call.
- * For Webpay Plus, wraps the refund commit response.
  */
 @Data
 @Builder
@@ -20,7 +19,7 @@ public class RefundResultPojo {
     private boolean success;
 
     /**
-     * Gateway response code. 0 = success for Webpay Plus.
+     * Gateway response code. 0 = success.
      */
     private int responseCode;
 
@@ -30,7 +29,7 @@ public class RefundResultPojo {
     private String type;
 
     /**
-     * Remaining balance on the card after the refund (Webpay).
+     * Remaining balance on the card after the refund.
      */
     private Long balance;
 

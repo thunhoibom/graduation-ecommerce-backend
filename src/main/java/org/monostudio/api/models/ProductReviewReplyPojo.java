@@ -2,34 +2,31 @@ package org.monostudio.api.models;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.experimental.SuperBuilder;
 
 import jakarta.validation.constraints.NotBlank;
+import java.time.LocalDateTime;
 
 import static com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL;
 
 @Data
-@SuperBuilder
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonInclude
-public class ProductCategoryPojo {
+@JsonInclude(NON_NULL)
+public class ProductReviewReplyPojo {
     private Long id;
     
     @NotBlank
-    private String code;
+    private String body;
     
-    @NotBlank
-    private String name;
+    /** Read-only: resolved author name (User or Customer) */
+    private String authorName;
     
-    @JsonInclude(NON_NULL)
-    private ProductCategoryPojo parent;
-
-    @JsonInclude(NON_NULL)
-    private Integer productCount;
-
-    @JsonInclude(NON_NULL)
-    private String imageUrl;
+    /** Read-only: whether author is staff */
+    private Boolean isStaff;
+    
+    private LocalDateTime createdAt;
 }

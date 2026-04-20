@@ -64,9 +64,9 @@ public class PaymentCallbackLog
     @Column(name = "callback_id", nullable = false)
     private Long id;
 
-    /**
+     /**
      * The payment gateway token — unique identifier for this callback.
-     * Webpay Plus token (or whichever gateway is used).
+     * VNPAY token (or whichever gateway is used).
      */
     @Column(name = "callback_token", nullable = false, unique = true, length = 128)
     private String token;

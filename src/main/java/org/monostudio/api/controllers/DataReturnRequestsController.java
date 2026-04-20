@@ -189,6 +189,28 @@ public class DataReturnRequestsController
         return returnRequestService.cancelReturnRequest(id);
     }
 
+    @PostMapping("/start-refund/{id}")
+    @Operation(summary = "Start the refund process for a return request.")
+    @PreAuthorize("hasAuthority('returnRequests:update')")
+    public ReturnRequestPojo startRefund(
+        @PathVariable Long id,
+        @RequestBody(required = false) Map<String, Object> body
+    ) throws EntityNotFoundException, BadInputException {
+        String adminNotes = body != null ? (String) body.get("adminNotes") : null;
+        return returnRequestService.startRefund(id, adminNotes);
+    }
+
+    @PostMapping("/notes/{id}")
+    @Operation(summary = "Add a note to a return request.")
+    @PreAuthorize("hasAuthority('returnRequests:update')")
+    public ReturnRequestPojo addNote(
+        @PathVariable Long id,
+        @RequestBody Map<String, String> body
+    ) throws EntityNotFoundException, BadInputException {
+        String note = body.get("note");
+        return returnRequestService.addNote(id, note);
+    }
+
     @Override
     protected Map<String, OrderSpecifier<?>> getOrderSpecMap() {
         return ReturnRequestsSortSpec.ORDER_SPEC_MAP;
