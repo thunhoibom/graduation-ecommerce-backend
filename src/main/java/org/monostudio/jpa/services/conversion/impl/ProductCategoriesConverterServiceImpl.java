@@ -22,10 +22,20 @@ public class ProductCategoriesConverterServiceImpl
 
     @Override
     public ProductCategoryPojo convertToPojo(ProductCategory source) {
-        return ProductCategoryPojo.builder()
+        ProductCategoryPojo target = ProductCategoryPojo.builder()
+            .id(source.getId())
             .code(source.getCode())
             .name(source.getName())
             .build();
+        if (source.getParent() != null) {
+            ProductCategoryPojo parent = ProductCategoryPojo.builder()
+                .id(source.getParent().getId())
+                .code(source.getParent().getCode())
+                .name(source.getParent().getName())
+                .build();
+            target.setParent(parent);
+        }
+        return target;
     }
 
     @Override

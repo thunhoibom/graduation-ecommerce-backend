@@ -27,4 +27,7 @@ public interface VariantImagesRepository
 
     @Query("SELECT vi FROM VariantImage vi JOIN FETCH vi.image WHERE vi.variant.id IN :variantIds AND vi.isPrimary = true")
     List<VariantImage> findPrimaryByVariantIds(@Param("variantIds") java.util.Collection<Long> variantIds);
+
+    @Query("SELECT vi FROM VariantImage vi JOIN FETCH vi.image WHERE vi.variant.id IN :variantIds ORDER BY vi.sortOrder ASC")
+    List<VariantImage> findByVariantIdIn(@Param("variantIds") java.util.Collection<Long> variantIds);
 }

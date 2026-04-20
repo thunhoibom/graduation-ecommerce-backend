@@ -26,4 +26,7 @@ public class ProductCategoryPojo {
     
     @JsonInclude(NON_NULL)
     private ProductCategoryPojo parent;
+
+    @JsonInclude(NON_NULL)
+    private Integer productCount;
 }

@@ -2,6 +2,11 @@ package org.monostudio.jpa.services.crud.impl;
 
 import com.querydsl.core.types.Predicate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.ImagePojo;
@@ -23,7 +28,9 @@ import jakarta.persistence.EntityNotFoundException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -122,6 +129,52 @@ public class ProductVariantsCrudServiceImpl
             throw new BadInputException("Invalid variant SKU");
         }
         return productVariantsRepository.findBySku(sku);
+    }
+
+    /**
+     * Override readMany to attach images in a single batch query (no N+1).
+     * Uses deepReadAll for the unfiltered path (JOIN FETCHes product).
+     * Uses repository predicate query for the filtered path.
+     */
+    @Override
+    public org.monostudio.api.models.DataPagePojo<ProductVariantPojo> readMany(
+            int pageIndex,
+            int pageSize,
+            @Nullable Sort order,
+            @Nullable Predicate filters
+    ) {
+        Pageable pagination = (order == null)
+            ? PageRequest.of(pageIndex, pageSize)
+            : PageRequest.of(pageIndex, pageSize, order);
+
+        Page<ProductVariant> page = (filters == null)
+            ? productVariantsRepository.deepReadAll(pagination)
+            : productVariantsRepository.findAll(filters, pagination);
+        List<ProductVariant> variants = page.getContent();
+
+        // Batch-load all variant images in a single round-trip (eliminates N+1)
+        if (!variants.isEmpty()) {
+            List<Long> variantIds = variants.stream()
+                .map(ProductVariant::getId)
+                .toList();
+            List<VariantImage> allImages = variantImagesRepository.findByVariantIdIn(variantIds);
+            Map<Long, List<VariantImage>> imagesByVariantId = allImages.stream()
+                .collect(Collectors.groupingBy(vi -> vi.getVariant().getId()));
+
+            List<ProductVariantPojo> pojoList = variants.stream().map(v -> {
+                ProductVariantPojo pojo = productVariantsConverterService.convertToPojo(v);
+                List<VariantImage> imgs = imagesByVariantId.getOrDefault(v.getId(), List.of());
+                pojo.setImages(productVariantsConverterService.convertVariantImagesToPojo(imgs));
+                pojo.setPrimaryImageUrl(productVariantsConverterService.extractPrimaryImageUrl(imgs));
+                return pojo;
+            }).toList();
+
+            return new org.monostudio.api.models.DataPagePojo<>(
+                pojoList, pageIndex, page.getTotalElements(), pageSize);
+        }
+
+        // Empty page — fall through to base behaviour
+        return super.readMany(pageIndex, pageSize, order, filters);
     }
 
     /**

@@ -20,4 +20,7 @@ public interface ProductsCategoriesRepository
 
     @Query("SELECT r.id FROM ProductCategory r WHERE r.parent.id = :parentId")
     List<Long> findIdsByParentId(@Param("parentId") Long parentId);
+
+    @Query("SELECT COUNT(p) FROM Product p WHERE p.productCategory.id = :categoryId")
+    long countProductsByCategoryId(@Param("categoryId") Long categoryId);
 }

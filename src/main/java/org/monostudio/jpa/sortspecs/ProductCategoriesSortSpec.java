@@ -12,7 +12,9 @@ import static lombok.AccessLevel.PRIVATE;
 public class ProductCategoriesSortSpec {
     private static final QProductCategory BASE_PATH = QProductCategory.productCategory;
     public static final Map<String, OrderSpecifier<?>> ORDER_SPEC_MAP = Map.of(
-        "name", BASE_PATH.name.asc(),
-        "code", BASE_PATH.code.asc()
+        "name",      BASE_PATH.name.asc(),
+        "name_desc", BASE_PATH.name.desc(),
+        "code",      BASE_PATH.code.asc(),
+        "code_desc", BASE_PATH.code.desc()
     );
 }
