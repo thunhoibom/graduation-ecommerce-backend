@@ -4,6 +4,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.DiscountValidationResult;
@@ -15,6 +16,7 @@ import org.monostudio.jpa.repositories.CustomersRepository;
 import org.monostudio.jpa.repositories.DiscountCodesRepository;
 import org.monostudio.jpa.repositories.DiscountUsagesRepository;
 import org.monostudio.jpa.repositories.OrdersRepository;
+import org.monostudio.config.cache.CacheNames;
 
 import java.time.LocalDateTime;
 
@@ -112,6 +114,7 @@ public class DiscountServiceImpl
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = CacheNames.PUBLIC_DISCOUNT_VALIDATION, allEntries = true)
     public void redeemDiscount(String code, int subtotal, Long customerId, Long orderId) throws BadInputException {
         if (StringUtils.isBlank(code)) {
             throw new BadInputException("Discount code is required");
@@ -147,13 +150,16 @@ public class DiscountServiceImpl
     }
 
     private int calculateDiscountAmount(DiscountCode discount, int subtotal) {
-        return switch (discount.getType()) {
-            case DiscountCode.TYPE_PERCENTAGE -> {
+        String normalizedType = discount.getType() == null
+            ? ""
+            : discount.getType().trim().toUpperCase();
+        return switch (normalizedType) {
+            case "PERCENT", DiscountCode.TYPE_PERCENTAGE -> {
                 // value is a percentage (1–100)
                 int percentage = Math.min(100, Math.max(1, discount.getValue()));
                 yield (int) Math.round((long) subtotal * percentage / 100.0);
             }
-            case DiscountCode.TYPE_FIXED_AMOUNT -> {
+            case "FIXED", DiscountCode.TYPE_FIXED_AMOUNT -> {
                 // value is in cents — cannot exceed subtotal
                 yield Math.min(discount.getValue(), subtotal);
             }

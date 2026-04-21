@@ -1,6 +1,8 @@
 package org.monostudio.api.services.impl;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.ProductPojo;
@@ -39,8 +41,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.monostudio.config.Constants.ORDER_STATUS_ADMIN_CANCELLED;
 import static org.monostudio.config.Constants.ORDER_STATUS_COMPLETED;
+import static org.monostudio.config.Constants.ORDER_STATUS_DELIVERY_CANCELLED;
+import static org.monostudio.config.Constants.ORDER_STATUS_DELIVERY_FAILED;
+import static org.monostudio.config.Constants.ORDER_STATUS_DELIVERY_ON_ROUTE;
 import static org.monostudio.config.Constants.ORDER_STATUS_PAID_CONFIRMED;
 import static org.monostudio.config.Constants.ORDER_STATUS_PAID_UNCONFIRMED;
 import static org.monostudio.config.Constants.ORDER_STATUS_PAYMENT_CANCELLED;
@@ -48,6 +52,8 @@ import static org.monostudio.config.Constants.ORDER_STATUS_PAYMENT_FAILED;
 import static org.monostudio.config.Constants.ORDER_STATUS_PAYMENT_STARTED;
 import static org.monostudio.config.Constants.ORDER_STATUS_PENDING;
 import static org.monostudio.config.Constants.ORDER_STATUS_REJECTED;
+import static org.monostudio.config.Constants.ORDER_STATUS_RETURNED;
+import org.monostudio.config.cache.CacheNames;
 
 @Transactional
 @Service
@@ -115,6 +121,13 @@ public class OrdersProcessServiceImpl
     // TODO figure out how to shorten below methods
     // TODO to compare statuses use numbers, not strings
     @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public OrderPojo markAsStarted(OrderPojo sell) throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
@@ -141,6 +154,13 @@ public class OrdersProcessServiceImpl
     }
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public OrderPojo markAsAborted(OrderPojo sell) throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
@@ -175,6 +195,13 @@ public class OrdersProcessServiceImpl
     }
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public OrderPojo markAsFailed(OrderPojo sell) throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
@@ -206,10 +233,21 @@ public class OrdersProcessServiceImpl
     }
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public OrderPojo markAsPaid(OrderPojo sell) throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
+        String currentStatus = existingOrder.getStatus().getName();
+        String paymentTypeName = existingOrder.getPaymentType() != null ? existingOrder.getPaymentType().getName() : null;
+        boolean isCodPendingTransition =
+            ORDER_STATUS_PENDING.equals(currentStatus) && "COD".equalsIgnoreCase(paymentTypeName);
 
-        if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PAYMENT_STARTED)) {
+        if (!ORDER_STATUS_PAYMENT_STARTED.equals(currentStatus) && !isCodPendingTransition) {
             // P0.5: Reject if order is not in PAYMENT_STARTED.
             // This guards against race conditions and duplicate webhook callbacks.
             // Note: PaymentCallbackLog in CheckoutServiceImpl is the primary defense;
@@ -217,7 +255,8 @@ public class OrdersProcessServiceImpl
             throw new BadInputException(
                 "Cannot mark order " + existingOrder.getId() + " as paid"
                     + " — current status is '" + existingOrder.getStatus().getName()
-                    + "', expected '" + ORDER_STATUS_PAYMENT_STARTED + "'. "
+                    + "', expected '" + ORDER_STATUS_PAYMENT_STARTED + "'"
+                    + " (or '" + ORDER_STATUS_PENDING + "' for COD). "
                     + "This may be a duplicate payment callback. "
                     + "If the order should already be PAID, no action is needed.");
         }
@@ -282,6 +321,13 @@ public class OrdersProcessServiceImpl
     }
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public OrderPojo markAsConfirmed(OrderPojo sell)
         throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
@@ -318,6 +364,13 @@ public class OrdersProcessServiceImpl
     }
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public OrderPojo markAsRejected(OrderPojo sell)
         throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
@@ -403,11 +456,18 @@ public class OrdersProcessServiceImpl
     }
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public OrderPojo markAsCompleted(OrderPojo sell)
         throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
-        if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PAID_CONFIRMED)) {
+        if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_DELIVERY_ON_ROUTE)) {
             throw new BadInputException(THE_TRANSACTION_IS_NOT_IN_A_VALID_STATE_FOR_THIS_OPERATION);
         }
 
@@ -439,100 +499,120 @@ public class OrdersProcessServiceImpl
     }
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public OrderPojo markAsDeliveryOnRoute(OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        return moveStatus(
+            sell,
+            ORDER_STATUS_PAID_CONFIRMED,
+            ORDER_STATUS_DELIVERY_ON_ROUTE
+        );
+    }
+
+    @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public OrderPojo markAsDeliveryFailed(OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        return moveStatus(
+            sell,
+            ORDER_STATUS_DELIVERY_ON_ROUTE,
+            ORDER_STATUS_DELIVERY_FAILED
+        );
+    }
+
+    @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public OrderPojo markAsDeliveryCancelled(OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        return moveStatus(
+            sell,
+            ORDER_STATUS_DELIVERY_ON_ROUTE,
+            ORDER_STATUS_DELIVERY_CANCELLED
+        );
+    }
+
+    @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public OrderPojo markAsReturned(OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        Order existingOrder = this.fetchExistingOrThrowException(sell);
+        String currentStatus = existingOrder.getStatus().getName();
+        boolean canReturn =
+            ORDER_STATUS_DELIVERY_FAILED.equals(currentStatus)
+                || ORDER_STATUS_DELIVERY_CANCELLED.equals(currentStatus)
+                || ORDER_STATUS_COMPLETED.equals(currentStatus);
+        if (!canReturn) {
+            throw new BadInputException(
+                "Cannot mark order " + existingOrder.getId() + " as returned"
+                    + " — current status is '" + currentStatus + "'.");
+        }
+
+        Optional<OrderStatus> returnedStatus = orderStatusesRepository.findByName(ORDER_STATUS_RETURNED);
+        if (returnedStatus.isEmpty()) {
+            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + ORDER_STATUS_RETURNED + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
+        }
+        ordersRepository.setStatus(existingOrder.getId(), returnedStatus.get());
+        OrderPojo target = this.convertOrThrowException(existingOrder);
+        target.setStatus(ORDER_STATUS_RETURNED);
+        sendClientEmail(target);
+        sendOwnerEmail(target);
+        return target;
+    }
+
+    @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public OrderPojo markAsAdminCancelled(OrderPojo sell, String reason)
         throws BadInputException, EntityNotFoundException {
         Order existingOrder = fetchExistingOrThrowException(sell);
 
         String currentStatus = existingOrder.getStatus().getName();
-        boolean canCancel =
-            currentStatus.equals(ORDER_STATUS_PENDING)
-            || currentStatus.equals(ORDER_STATUS_PAYMENT_STARTED)
-            || currentStatus.equals(ORDER_STATUS_PAID_UNCONFIRMED)
-            || currentStatus.equals(ORDER_STATUS_PAID_CONFIRMED);
-
-        if (!canCancel) {
+        if (!ORDER_STATUS_DELIVERY_ON_ROUTE.equals(currentStatus)) {
             throw new BadInputException(
-                "Cannot cancel order in status '" + currentStatus + "'");
+                "Cannot recall order in status '" + currentStatus + "'");
         }
 
-        // Determine if payment has already been made BEFORE changing the status
-        boolean wasPaid = currentStatus.equals(ORDER_STATUS_PAID_UNCONFIRMED)
-            || currentStatus.equals(ORDER_STATUS_PAID_CONFIRMED);
-
-        Optional<OrderStatus> cancelledStatus =
-            orderStatusesRepository.findByName(ORDER_STATUS_ADMIN_CANCELLED);
-        if (cancelledStatus.isEmpty()) {
-            throw new IllegalStateException(
-                "Status '" + ORDER_STATUS_ADMIN_CANCELLED
-                    + "' not found in DB — has it been seeded?");
-        }
-
-        // P2: Fetch lazy-loaded fields BEFORE status update clears the persistence context
-        String paymentTypeName = existingOrder.getPaymentType() != null ? existingOrder.getPaymentType().getName() : null;
-
-        ordersRepository.setStatus(existingOrder.getId(), cancelledStatus.get());
-
-        OrderPojo target = convertOrThrowException(existingOrder);
-        target.setStatus(ORDER_STATUS_ADMIN_CANCELLED);
-
-        // Restore stock based on current order status:
-        // - PENDING / PAYMENT_STARTED: stock was reserved but never deducted → release reservation only
-        // - PAID_UNCONFIRMED / PAID_CONFIRMED: stock was deducted at markAsPaid → restore stockCurrent
-        if (existingOrder.getCartSessionToken() != null) {
-            if (wasPaid) {
-                // Stock was already deducted — restore it back to available inventory
-                for (OrderDetail detail : orderDetailsRepository.findBySellId(existingOrder.getId())) {
-                    if (detail.getProductVariant() != null) {
-                        stockReservationService.restoreStockCurrent(
-                            existingOrder.getCartSessionToken(),
-                            detail.getProductVariant().getSku(),
-                            detail.getUnits(),
-                            existingOrder.getId(),
-                            StockAdjustment.StockAdjustmentReason.ORDER_CANCELLED
-                        );
-                    }
-                }
-            } else {
-                // Payment not yet made — just release the reservation
-                stockReservationService.release(existingOrder.getCartSessionToken());
-            }
-        }
-
-        // If payment was already made, trigger a refund through the payment gateway.
-        PaymentService paymentService = (paymentServices != null && paymentTypeName != null) ? paymentServices.get(paymentTypeName) : null;
-        if (wasPaid && existingOrder.getTransactionToken() != null && paymentService != null) {
-            try {
-                RefundResultPojo result = paymentService.refund(
-                    existingOrder.getTransactionToken(),
-                    existingOrder.getTotalValue()
-                );
-                if (result.isSuccess()) {
-                    logger.info("Admin cancelled order {}: refund succeeded, type={}",
-                        existingOrder.getId(), result.getType());
-                } else {
-                    logger.warn("Admin cancelled order {}: refund rejected by gateway (code={}) — enqueuing for retry",
-                        existingOrder.getId(), result.getResponseCode());
-                    enqueueRefundRetry(existingOrder, "ADMIN_CANCELLED");
-                }
-            } catch (PaymentServiceException e) {
-                // Gateway unreachable or errored — enqueue for retry instead of swallowing
-                logger.error("Admin cancelled order {}: refund gateway error ({}). "
-                        + "Enqueued for automatic retry.",
-                    existingOrder.getId(), e.getMessage());
-                enqueueRefundRetry(existingOrder, "ADMIN_CANCELLED");
-            }
-        }
-
-        logger.info("Order {} admin-cancelled. Reason: {}. WasPaid: {}",
-            existingOrder.getId(), reason, wasPaid);
-        sendClientEmail(target);
-        sendOwnerEmail(target);
-        kafkaOrderProducer.publishOrderCancelled(existingOrder.getId());
-
-        return target;
+        logger.info("Order {} requested delivery recall. Reason: {}", existingOrder.getId(), reason);
+        return markAsDeliveryCancelled(sell);
     }
 
     @Override
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public int expireStalePaymentSessions() {
         Instant cutoff = Instant.now().minus(30, ChronoUnit.MINUTES);
         List<Order> stale = ordersRepository.findByStatusNameAndDateBefore(
@@ -550,6 +630,29 @@ public class OrdersProcessServiceImpl
             }
         }
         return count;
+    }
+
+    private OrderPojo moveStatus(OrderPojo sell, String fromStatus, String toStatus)
+        throws BadInputException, EntityNotFoundException {
+        Order existingOrder = this.fetchExistingOrThrowException(sell);
+        if (!existingOrder.getStatus().getName().equals(fromStatus)) {
+            throw new BadInputException(
+                "Cannot move order " + existingOrder.getId()
+                    + " to '" + toStatus + "'"
+                    + " — current status is '" + existingOrder.getStatus().getName()
+                    + "', expected '" + fromStatus + "'.");
+        }
+
+        Optional<OrderStatus> status = orderStatusesRepository.findByName(toStatus);
+        if (status.isEmpty()) {
+            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + toStatus + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
+        }
+        ordersRepository.setStatus(existingOrder.getId(), status.get());
+        OrderPojo target = this.convertOrThrowException(existingOrder);
+        target.setStatus(toStatus);
+        sendClientEmail(target);
+        sendOwnerEmail(target);
+        return target;
     }
 
     private Order fetchExistingOrThrowException(OrderPojo sell) throws BadInputException {

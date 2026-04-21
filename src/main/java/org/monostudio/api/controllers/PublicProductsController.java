@@ -3,6 +3,7 @@ package org.monostudio.api.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +22,7 @@ import org.monostudio.jpa.sortspecs.ProductsSortSpec;
 import jakarta.persistence.EntityNotFoundException;
 import org.monostudio.search.models.ProductDocument;
 import org.monostudio.search.services.SearchService;
+import org.monostudio.config.cache.CacheNames;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +63,7 @@ public class PublicProductsController {
      */
     @GetMapping
     @Operation(summary = "List or search published products")
+    @Cacheable(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, key = "@cacheKeyBuilder.fromParams(#allRequestParams)")
     public DataPagePojo<ProductPojo> listProducts(@RequestParam Map<String, String> allRequestParams) {
         // Always enforce status=PUBLISHED for public listings
         Map<String, String> params = new HashMap<>();
@@ -89,6 +92,7 @@ public class PublicProductsController {
      */
     @GetMapping("/{barcode}")
     @Operation(summary = "Get a published product by barcode")
+    @Cacheable(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, key = "#barcode")
     public ProductPojo getProductByBarcode(@PathVariable String barcode) {
         // First check if product exists and is published
         Map<String, String> params = new HashMap<>();

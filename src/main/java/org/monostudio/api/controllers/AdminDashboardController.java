@@ -3,6 +3,7 @@ package org.monostudio.api.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.lang.Nullable;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.monostudio.api.models.*;
 import org.monostudio.api.services.AdminDashboardService;
+import org.monostudio.config.cache.CacheNames;
 
 import java.time.LocalDate;
 import java.util.Collection;
@@ -42,6 +44,7 @@ public class AdminDashboardController {
     @GetMapping("/stats")
     @PreAuthorize("hasAuthority('dashboard:read')")
     @Operation(summary = "Get all dashboard statistics for a date range.")
+    @Cacheable(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, key = "@cacheKeyBuilder.dashboard(#from, #to)")
     public AdminDashboardStatsPojo getDashboardStats(
         @RequestParam @Nullable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
         @RequestParam @Nullable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
@@ -59,6 +62,7 @@ public class AdminDashboardController {
     @GetMapping("/stats/revenue")
     @PreAuthorize("hasAuthority('dashboard:read')")
     @Operation(summary = "Get revenue statistics grouped by time period.")
+    @Cacheable(cacheNames = CacheNames.ADMIN_REVENUE_STATS, key = "@cacheKeyBuilder.dashboardRevenue(#from, #to, #groupBy)")
     public Collection<RevenueStatPojo> getRevenueByPeriod(
         @RequestParam @Nullable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
         @RequestParam @Nullable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -77,6 +81,7 @@ public class AdminDashboardController {
     @GetMapping("/stats/top-products")
     @PreAuthorize("hasAuthority('dashboard:read')")
     @Operation(summary = "Get top selling products by units sold.")
+    @Cacheable(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, key = "@cacheKeyBuilder.dashboardTopProducts(#from, #to, #limit)")
     public Collection<TopProductPojo> getTopProducts(
         @RequestParam @Nullable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
         @RequestParam @Nullable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -93,6 +98,7 @@ public class AdminDashboardController {
     @GetMapping("/stats/low-stock")
     @PreAuthorize("hasAuthority('dashboard:read')")
     @Operation(summary = "Get all variants at or below critical stock level.")
+    @Cacheable(cacheNames = CacheNames.ADMIN_LOW_STOCK, key = "'all'")
     public Collection<LowStockAlertPojo> getLowStockAlerts() {
         return dashboardService.getLowStockAlerts();
     }
@@ -105,6 +111,7 @@ public class AdminDashboardController {
     @GetMapping("/stats/order-statuses")
     @PreAuthorize("hasAuthority('dashboard:read')")
     @Operation(summary = "Get order counts grouped by status.")
+    @Cacheable(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, key = "@cacheKeyBuilder.dashboard(#from, #to)")
     public Collection<OrderStatusCountPojo> getOrderStatusBreakdown(
         @RequestParam @Nullable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
         @RequestParam @Nullable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to

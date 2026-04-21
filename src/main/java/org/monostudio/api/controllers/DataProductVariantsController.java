@@ -4,6 +4,8 @@ import com.querydsl.core.types.OrderSpecifier;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.monostudio.api.DataCrudGenericController;
@@ -19,6 +21,7 @@ import org.monostudio.jpa.services.SortSpecParserService;
 import org.monostudio.jpa.services.crud.ProductVariantsCrudService;
 import org.monostudio.jpa.services.predicates.ProductVariantsPredicateService;
 import org.monostudio.jpa.sortspecs.ProductVariantsSortSpec;
+import org.monostudio.config.cache.CacheNames;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
@@ -62,6 +65,12 @@ public class DataProductVariantsController
     @Operation(summary = "Define a new product variant.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('products:create')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
+    })
 
     public void create(@RequestBody @Valid ProductVariantPojo input)
 
@@ -73,6 +82,12 @@ public class DataProductVariantsController
     @Operation(summary = "Replace product variant data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
+    })
 
     public void update(@RequestBody @Valid ProductVariantPojo input, @PathVariable Long id)
 
@@ -84,6 +99,12 @@ public class DataProductVariantsController
     @Operation(summary = "Update parts of product variant data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
+    })
 
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
@@ -97,6 +118,12 @@ public class DataProductVariantsController
     @Operation(summary = "Remove product variants.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('products:delete')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
+    })
 
     public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
@@ -128,6 +155,12 @@ public class DataProductVariantsController
     @PostMapping("/bulk-activate")
     @Operation(summary = "Bulk-activate variants")
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
+    })
     public BulkOperationResult bulkActivate(@RequestBody List<Long> ids) {
         return variantsBulkService.bulkActivate(ids);
     }
@@ -138,6 +171,12 @@ public class DataProductVariantsController
     @PostMapping("/bulk-deactivate")
     @Operation(summary = "Bulk-deactivate variants")
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
+    })
     public BulkOperationResult bulkDeactivate(@RequestBody List<Long> ids) {
         return variantsBulkService.bulkDeactivate(ids);
     }
@@ -148,6 +187,12 @@ public class DataProductVariantsController
     @PostMapping("/bulk-delete")
     @Operation(summary = "Bulk-delete variants")
     @PreAuthorize("hasAuthority('products:delete')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
+    })
     public BulkOperationResult bulkDeleteVariants(@RequestBody List<Long> ids) {
         return variantsBulkService.bulkDelete(ids);
     }
@@ -159,6 +204,12 @@ public class DataProductVariantsController
     @PostMapping(value = "/import", consumes = "multipart/form-data")
     @Operation(summary = "Import variants from CSV")
     @PreAuthorize("hasAuthority('products:create')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
+    })
     public ProductCsvImportResult importVariants(
         @RequestPart("file") org.springframework.web.multipart.MultipartFile file
     ) throws IOException {

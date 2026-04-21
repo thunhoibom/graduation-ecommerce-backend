@@ -4,6 +4,7 @@ import com.querydsl.core.types.OrderSpecifier;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +27,7 @@ import org.monostudio.jpa.services.SortSpecParserService;
 import org.monostudio.jpa.services.crud.DiscountCodesCrudService;
 import org.monostudio.jpa.services.predicates.DiscountCodesPredicateService;
 import org.monostudio.jpa.sortspecs.DiscountCodesSortSpec;
+import org.monostudio.config.cache.CacheNames;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
@@ -63,7 +65,8 @@ public class DataDiscountCodesController
     @Operation(summary = "Create a new discount code.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('discountCodes:create')")
-    public void create( DiscountCodePojo input)
+    @CacheEvict(cacheNames = CacheNames.PUBLIC_DISCOUNT_VALIDATION, allEntries = true)
+    public void create(@Valid @RequestBody DiscountCodePojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
     }
@@ -72,7 +75,8 @@ public class DataDiscountCodesController
     @Operation(summary = "Replace discount code data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('discountCodes:update')")
-    public void update(DiscountCodePojo input, @PathVariable Long id)
+    @CacheEvict(cacheNames = CacheNames.PUBLIC_DISCOUNT_VALIDATION, allEntries = true)
+    public void update(@Valid @RequestBody DiscountCodePojo input, @PathVariable Long id)
         throws BadInputException, EntityNotFoundException {
         crudService.update(input, id);
     }
@@ -81,6 +85,7 @@ public class DataDiscountCodesController
     @Operation(summary = "Update parts of discount code data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('discountCodes:update')")
+    @CacheEvict(cacheNames = CacheNames.PUBLIC_DISCOUNT_VALIDATION, allEntries = true)
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
         @PathVariable Long id
@@ -93,6 +98,7 @@ public class DataDiscountCodesController
     @Operation(summary = "Remove discount codes.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('discountCodes:delete')")
+    @CacheEvict(cacheNames = CacheNames.PUBLIC_DISCOUNT_VALIDATION, allEntries = true)
     public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
         crudService.delete(id);

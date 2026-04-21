@@ -77,6 +77,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/public/discount/**").permitAll()
                 .requestMatchers("/api/public/shipping/**").permitAll()
                 .requestMatchers("/api/public/checkout/**").permitAll()
+                .requestMatchers("/api/data/notifications/stream").permitAll()
                 .requestMatchers("/api/public/categories", "/api/public/categories/**").permitAll()
                 .requestMatchers("/api/public/products/", "/api/public/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/data/products", "/api/data/products/**").permitAll()

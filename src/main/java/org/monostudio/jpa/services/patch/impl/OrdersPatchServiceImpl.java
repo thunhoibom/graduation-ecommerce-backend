@@ -8,7 +8,6 @@ import org.monostudio.api.models.OrderPojo;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.repositories.PaymentTypesRepository;
-import org.monostudio.jpa.repositories.OrderStatusesRepository;
 import org.monostudio.jpa.repositories.ShippingMethodsRepository;
 import org.monostudio.jpa.services.patch.OrdersPatchService;
 
@@ -19,17 +18,14 @@ import java.util.Map;
 @Service
 public class OrdersPatchServiceImpl
     implements OrdersPatchService {
-    private final OrderStatusesRepository statusesRepository;
     private final PaymentTypesRepository paymentTypesRepository;
     private final ShippingMethodsRepository shippingMethodsRepository;
 
     @Autowired
     public OrdersPatchServiceImpl(
-        OrderStatusesRepository statusesRepository,
         PaymentTypesRepository paymentTypesRepository,
         ShippingMethodsRepository shippingMethodsRepository
     ) {
-        this.statusesRepository = statusesRepository;
         this.paymentTypesRepository = paymentTypesRepository;
         this.shippingMethodsRepository = shippingMethodsRepository;
     }
@@ -51,7 +47,10 @@ public class OrdersPatchServiceImpl
             if (changes.containsKey("status")) {
                 String statusName = (String) changes.get("status");
                 if (!StringUtils.isBlank(statusName)) {
-                    statusesRepository.findByName(statusName).ifPresent(target::setStatus);
+                    throw new BadInputException(
+                        "Order status cannot be patched directly. "
+                            + "Use process endpoints to enforce valid transitions."
+                    );
                 }
             }
 

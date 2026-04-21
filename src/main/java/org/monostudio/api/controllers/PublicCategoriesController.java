@@ -3,6 +3,7 @@ package org.monostudio.api.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +14,7 @@ import org.monostudio.jpa.entities.ProductCategory;
 import org.monostudio.jpa.repositories.ProductsCategoriesRepository;
 import org.monostudio.jpa.services.conversion.ImagesConverterService;
 import org.monostudio.jpa.services.CategoryEnrichmentService;
+import org.monostudio.config.cache.CacheNames;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.util.ArrayList;
@@ -52,6 +54,7 @@ public class PublicCategoriesController {
      */
     @GetMapping
     @Operation(summary = "Get full public category tree")
+    @Cacheable(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, key = "'tree'")
     public List<CategoryTreePojo> getCategoryTree() {
         List<ProductCategory> allCategories = categoriesRepository.findAll();
 
@@ -74,6 +77,7 @@ public class PublicCategoriesController {
      */
     @GetMapping("/{code}")
     @Operation(summary = "Get a single category by code with its subtree")
+    @Cacheable(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, key = "#code")
     public CategoryTreePojo getCategoryByCode(@PathVariable String code) {
         ProductCategory root = categoriesRepository.findByCode(code)
             .orElseThrow(() -> new EntityNotFoundException(

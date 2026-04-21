@@ -13,6 +13,7 @@ import org.monostudio.api.models.OrderDetailPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.PaymentResultPojo;
+import org.monostudio.api.services.AdminNotificationService;
 import org.monostudio.api.services.CheckoutService;
 import org.monostudio.api.services.DiscountService;
 import org.monostudio.api.services.OrdersProcessService;
@@ -27,6 +28,7 @@ import org.monostudio.jpa.entities.ProductVariant;
 import org.monostudio.jpa.entities.ShippingMethod;
 import org.monostudio.jpa.repositories.CartSessionsRepository;
 import org.monostudio.jpa.repositories.OrderDetailsRepository;
+import org.monostudio.jpa.repositories.OrdersRepository;
 import org.monostudio.jpa.repositories.ProductsRepository;
 import org.monostudio.jpa.repositories.ShippingMethodsRepository;
 import org.monostudio.jpa.services.conversion.OrdersConverterService;
@@ -68,11 +70,13 @@ public class CheckoutServiceImpl
     private final ProductsRepository productsRepository;
     private final CartSessionsRepository cartSessionsRepository;
     private final OrderDetailsRepository orderDetailsRepository;
+    private final OrdersRepository ordersRepository;
     private final Map<String, PaymentService> paymentServices;
     private final StockReservationService stockReservationService;
     private final DiscountService discountService;
     private final ShippingMethodsService shippingMethodsService;
     private final PaymentCallbackLogRepository paymentCallbackLogRepository;
+    private final AdminNotificationService adminNotificationService;
 
     static final double TAX_PERCENT = 0.19;
 
@@ -88,11 +92,13 @@ public class CheckoutServiceImpl
         ProductsRepository productsRepository,
         CartSessionsRepository cartSessionsRepository,
         OrderDetailsRepository orderDetailsRepository,
+        OrdersRepository ordersRepository,
         Map<String, PaymentService> paymentServices,
         StockReservationService stockReservationService,
         DiscountService discountService,
         ShippingMethodsService shippingMethodsService,
-        PaymentCallbackLogRepository paymentCallbackLogRepository
+        PaymentCallbackLogRepository paymentCallbackLogRepository,
+        AdminNotificationService adminNotificationService
     ) {
         this.ordersCrudService = ordersCrudService;
         this.ordersProcessService = ordersProcessService;
@@ -104,11 +110,13 @@ public class CheckoutServiceImpl
         this.productsRepository = productsRepository;
         this.cartSessionsRepository = cartSessionsRepository;
         this.orderDetailsRepository = orderDetailsRepository;
+        this.ordersRepository = ordersRepository;
         this.paymentServices = paymentServices;
         this.stockReservationService = stockReservationService;
         this.discountService = discountService;
         this.shippingMethodsService = shippingMethodsService;
         this.paymentCallbackLogRepository = paymentCallbackLogRepository;
+        this.adminNotificationService = adminNotificationService;
     }
 
     /**
@@ -219,6 +227,7 @@ public class CheckoutServiceImpl
 
         // ── 8. Create order ─────────────────────────────────────────────────────
         OrderPojo createdOrder = ordersCrudService.create(orderPojo);
+        adminNotificationService.publishOrderCreated(createdOrder);
 
         // ── 9. Request payment URL ──────────────────────────────────────────────
         PaymentService paymentService = paymentServices.get(createdOrder.getPaymentType());
@@ -229,11 +238,14 @@ public class CheckoutServiceImpl
         PaymentRedirectionDetailsPojo paymentDetails =
             paymentService.requestNewPaymentPageDetails(createdOrder);
 
-        createdOrder.setToken(paymentDetails.getToken());
-        ordersProcessService.markAsStarted(createdOrder);
-
         if ("COD".equals(createdOrder.getPaymentType())) {
-            this.confirmTransaction(paymentDetails.getToken(), false);
+            // COD follows Pending -> Paid, Unconfirmed directly (no online payment session).
+            createdOrder.setToken(paymentDetails.getToken());
+            ordersRepository.setTransactionToken(createdOrder.getId(), paymentDetails.getToken());
+            ordersProcessService.markAsPaid(createdOrder);
+        } else {
+            createdOrder.setToken(paymentDetails.getToken());
+            ordersProcessService.markAsStarted(createdOrder);
         }
 
         logger.info("Checkout started: orderId={}, token={}, total={}, shipping={}, discount={}",

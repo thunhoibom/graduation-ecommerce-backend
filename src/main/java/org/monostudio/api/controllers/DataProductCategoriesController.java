@@ -5,6 +5,8 @@ import com.querydsl.core.types.Predicate;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +33,7 @@ import org.monostudio.jpa.services.predicates.ProductCategoriesPredicateService;
 import org.monostudio.jpa.services.predicates.ProductsPredicateService;
 import org.monostudio.jpa.sortspecs.ProductCategoriesSortSpec;
 import org.monostudio.jpa.sortspecs.ProductsSortSpec;
+import org.monostudio.config.cache.CacheNames;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
@@ -99,6 +102,11 @@ public class DataProductCategoriesController
     @Operation(summary = "Define new product categories.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('product_categories:create')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true)
+    })
     public void create(@RequestBody ProductCategoryPojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
@@ -108,6 +116,11 @@ public class DataProductCategoriesController
     @Operation(summary = "Replace product categories data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('product_categories:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true)
+    })
     public void update(@RequestBody ProductCategoryPojo input, @PathVariable Long id)
         throws BadInputException, EntityNotFoundException {
         crudService.update(input, id);
@@ -117,6 +130,11 @@ public class DataProductCategoriesController
     @Operation(summary = "Update parts of product categories data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('product_categories:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true)
+    })
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
         @PathVariable Long id
@@ -129,6 +147,11 @@ public class DataProductCategoriesController
     @Operation(summary = "Remove product categories.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('product_categories:delete')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true)
+    })
     public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
         crudService.delete(id);

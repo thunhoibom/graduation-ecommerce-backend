@@ -75,6 +75,26 @@ public interface OrdersProcessService {
     OrderPojo markAsCompleted(OrderPojo sell) throws BadInputException, EntityNotFoundException;
 
     /**
+     * Updates status to "delivery on route" after packing/dispatch handover.
+     */
+    OrderPojo markAsDeliveryOnRoute(OrderPojo sell) throws BadInputException, EntityNotFoundException;
+
+    /**
+     * Updates status to "delivery failed" when carrier cannot deliver.
+     */
+    OrderPojo markAsDeliveryFailed(OrderPojo sell) throws BadInputException, EntityNotFoundException;
+
+    /**
+     * Updates status to "delivery cancelled" when shop recalls an in-transit shipment.
+     */
+    OrderPojo markAsDeliveryCancelled(OrderPojo sell) throws BadInputException, EntityNotFoundException;
+
+    /**
+     * Final status for returned orders (failed/cancelled delivery or post-delivery return).
+     */
+    OrderPojo markAsReturned(OrderPojo sell) throws BadInputException, EntityNotFoundException;
+
+    /**
      * Admin forcefully cancels an order (e.g. fraud, customer request after payment).
      * Releases stock reservations and triggers a refund if payment has been made.
      *

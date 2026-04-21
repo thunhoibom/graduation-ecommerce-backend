@@ -3,6 +3,7 @@ package org.monostudio.api.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -11,6 +12,7 @@ import org.monostudio.api.models.ShippingRatePojo;
 import org.monostudio.api.services.ShippingMethodsService;
 import org.monostudio.jpa.entities.ShippingMethod;
 import org.monostudio.jpa.repositories.ShippingMethodsRepository;
+import org.monostudio.config.cache.CacheNames;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -40,6 +42,10 @@ public class PublicShippingMethodsController {
      */
     @GetMapping("/methods")
     @Operation(summary = "List active shipping methods with computed fees")
+    @Cacheable(
+        cacheNames = CacheNames.PUBLIC_SHIPPING_METHODS,
+        key = "@cacheKeyBuilder.shipping(#subtotal, #latitude, #longitude)"
+    )
     public List<ShippingRatePojo> getShippingMethods(
         @RequestParam(required = false) Integer subtotal,
         @RequestParam(required = false) Double latitude,

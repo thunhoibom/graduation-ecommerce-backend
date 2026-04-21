@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @Slf4j
@@ -54,16 +55,7 @@ public class ShipmentTrackingServiceImpl implements ShipmentTrackingService {
             ordersRepository.setTracking(order.getId(), payload.getTracking_number(), payload.getShipper_code());
         }
 
-        // 3. Auto-complete order if DELIVERED
-        if ("DELIVERED".equals(payload.getStatus())) {
-            try {
-                OrderPojo pojo = OrderPojo.builder().id(order.getId()).build();
-                ordersProcessService.markAsCompleted(pojo);
-                log.info("Order {} automatically marked as COMPLETED due to delivery.", order.getId());
-            } catch (Exception e) {
-                log.error("Failed to automatically mark order {} as COMPLETED: {}", order.getId(), e.getMessage());
-            }
-        }
+        applyWorkflowTransition(order.getId(), payload.getStatus());
 
         // 4. Publish to Kafka for Elasticsearch and other consumers
         ShipmentTrackingEvent event = ShipmentTrackingEvent.builder()
@@ -90,5 +82,37 @@ public class ShipmentTrackingServiceImpl implements ShipmentTrackingService {
     @Override
     public List<ShipmentTrackingDocument> getByOrderId(Long orderId) {
         return searchRepository.findByOrderIdOrderByEventTimeDesc(orderId);
+    }
+
+    private void applyWorkflowTransition(Long orderId, String rawStatus) {
+        if (rawStatus == null || rawStatus.isBlank()) {
+            return;
+        }
+        String normalized = rawStatus.trim().toUpperCase(Locale.ROOT);
+        OrderPojo pojo = OrderPojo.builder().id(orderId).build();
+
+        try {
+            if (normalized.contains("RETURN")) {
+                ordersProcessService.markAsReturned(pojo);
+                return;
+            }
+            if (normalized.equals("DELIVERED") || normalized.equals("DELIVERY_COMPLETE") || normalized.equals("COMPLETED")) {
+                ordersProcessService.markAsCompleted(pojo);
+                return;
+            }
+            if (normalized.contains("DELIVERY_FAILED") || normalized.equals("FAILED") || normalized.contains("UNDELIVERABLE")) {
+                ordersProcessService.markAsDeliveryFailed(pojo);
+                return;
+            }
+            if (normalized.contains("CANCELLED") || normalized.contains("RECALL")) {
+                ordersProcessService.markAsDeliveryCancelled(pojo);
+                return;
+            }
+            if (normalized.equals("IN_TRANSIT") || normalized.equals("ON_ROUTE") || normalized.equals("OUT_FOR_DELIVERY")) {
+                ordersProcessService.markAsDeliveryOnRoute(pojo);
+            }
+        } catch (Exception e) {
+            log.error("Failed to apply shipping status {} to order {}: {}", rawStatus, orderId, e.getMessage());
+        }
     }
 }

@@ -4,6 +4,7 @@ import com.querydsl.core.types.OrderSpecifier;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +27,7 @@ import org.monostudio.jpa.services.SortSpecParserService;
 import org.monostudio.jpa.services.crud.ShippingMethodsCrudService;
 import org.monostudio.jpa.services.predicates.ShippingMethodsPredicateService;
 import org.monostudio.jpa.sortspecs.ShippingMethodsSortSpec;
+import org.monostudio.config.cache.CacheNames;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
@@ -62,6 +64,7 @@ public class DataShippingMethodsController
     @Operation(summary = "Define new shipping methods.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('shipping-methods:create')")
+    @CacheEvict(cacheNames = CacheNames.PUBLIC_SHIPPING_METHODS, allEntries = true)
     public void create( ShippingMethodPojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
@@ -71,6 +74,7 @@ public class DataShippingMethodsController
     @Operation(summary = "Replace shipping methods data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('shipping-methods:update')")
+    @CacheEvict(cacheNames = CacheNames.PUBLIC_SHIPPING_METHODS, allEntries = true)
     public void update(ShippingMethodPojo input, @PathVariable Long id)
         throws BadInputException, EntityNotFoundException {
         crudService.update(input, id);
@@ -80,6 +84,7 @@ public class DataShippingMethodsController
     @Operation(summary = "Update parts of shipping methods data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('shipping-methods:update')")
+    @CacheEvict(cacheNames = CacheNames.PUBLIC_SHIPPING_METHODS, allEntries = true)
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
         @PathVariable Long id
@@ -92,6 +97,7 @@ public class DataShippingMethodsController
     @Operation(summary = "Remove shipping methods.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('shipping-methods:delete')")
+    @CacheEvict(cacheNames = CacheNames.PUBLIC_SHIPPING_METHODS, allEntries = true)
     public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
         crudService.delete(id);

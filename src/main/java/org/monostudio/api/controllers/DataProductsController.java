@@ -4,6 +4,8 @@ import com.querydsl.core.types.OrderSpecifier;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.monostudio.api.DataCrudGenericController;
@@ -23,6 +25,7 @@ import org.monostudio.jpa.services.crud.ProductsCrudService;
 import org.monostudio.jpa.services.predicates.ProductsPredicateService;
 import org.monostudio.jpa.sortspecs.ProductsSortSpec;
 import org.monostudio.search.kafka.IndexEventProducer;
+import org.monostudio.config.cache.CacheNames;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
@@ -75,6 +78,17 @@ public class DataProductsController
     @Operation(summary = "Define new products.")
     @ResponseStatus(CREATED)
     @PreAuthorize("hasAuthority('products:create')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public void create(@RequestBody ProductPojo input)
         throws BadInputException, EntityExistsException {
         crudService.create(input);
@@ -84,6 +98,17 @@ public class DataProductsController
     @Operation(summary = "Replace products data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public void update(@RequestBody ProductPojo input, @PathVariable Long id)
         throws BadInputException, EntityNotFoundException {
         crudService.update(input, id);
@@ -93,6 +118,17 @@ public class DataProductsController
     @Operation(summary = "Update parts of products data.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
         @PathVariable Long id
@@ -105,6 +141,17 @@ public class DataProductsController
     @Operation(summary = "Remove products.")
     @ResponseStatus(NO_CONTENT)
     @PreAuthorize("hasAuthority('products:delete')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public void delete(@PathVariable Long id)
         throws EntityNotFoundException {
         crudService.delete(id);
@@ -124,6 +171,17 @@ public class DataProductsController
     @PatchMapping("/{id}/publish")
     @Operation(summary = "Publish a draft product — makes it visible to customers")
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public ProductPojo publishProduct(@PathVariable Long id)
         throws EntityNotFoundException {
         Product product = productsRepository.findById(id)
@@ -144,6 +202,17 @@ public class DataProductsController
     @PatchMapping("/{id}/unpublish")
     @Operation(summary = "Unpublish a product — hides it from customers (discontinued/seasonal)")
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public ProductPojo unpublishProduct(@PathVariable Long id)
         throws EntityNotFoundException {
         Product product = productsRepository.findById(id)
@@ -163,6 +232,17 @@ public class DataProductsController
     @PatchMapping("/{id}/revert-to-draft")
     @Operation(summary = "Revert a product back to draft — removes from public visibility")
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public ProductPojo revertToDraft(@PathVariable Long id)
         throws EntityNotFoundException {
         Product product = productsRepository.findById(id)
@@ -201,6 +281,17 @@ public class DataProductsController
     @PostMapping("/bulk-publish")
     @Operation(summary = "Bulk-publish products")
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public BulkOperationResult bulkPublish(@RequestBody List<Long> ids)
         throws BadInputException {
         return bulkOperationsService.bulkPublish(ids);
@@ -215,6 +306,17 @@ public class DataProductsController
     @PostMapping("/bulk-unpublish")
     @Operation(summary = "Bulk-unpublish products")
     @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public BulkOperationResult bulkUnpublish(@RequestBody List<Long> ids)
         throws BadInputException {
         return bulkOperationsService.bulkUnpublish(ids);
@@ -229,6 +331,17 @@ public class DataProductsController
     @PostMapping("/bulk-delete")
     @Operation(summary = "Bulk-delete products")
     @PreAuthorize("hasAuthority('products:delete')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public BulkOperationResult bulkDelete(@RequestBody List<Long> ids)
         throws BadInputException {
         return bulkOperationsService.bulkDelete(ids);
@@ -244,6 +357,17 @@ public class DataProductsController
     @PostMapping(value = "/import", consumes = "multipart/form-data")
     @Operation(summary = "Import products from CSV")
     @PreAuthorize("hasAuthority('products:create')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_TREE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_CATEGORY_BY_CODE, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
     public ProductCsvImportResult importProducts(
         @RequestPart("file") org.springframework.web.multipart.MultipartFile file
     ) throws IOException {

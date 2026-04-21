@@ -50,7 +50,7 @@ public class DiscountCodesConverterServiceImpl
         DiscountCode target = DiscountCode.builder()
             .code(source.getCode().toUpperCase().trim())
             .description(source.getDescription())
-            .type(source.getType())
+            .type(normalizeDiscountType(source.getType()))
             .value(source.getValue())
             .maxUses(source.getMaxUses())
             .maxUsesPerCustomer(source.getMaxUsesPerCustomer())
@@ -65,5 +65,17 @@ public class DiscountCodesConverterServiceImpl
     @Override
     public DiscountCode applyChangesToExistingEntity(DiscountCodePojo source, DiscountCode target) {
         throw new UnsupportedOperationException("This method is deprecated");
+    }
+
+    private String normalizeDiscountType(String rawType) throws BadInputException {
+        if (rawType == null) {
+            throw new BadInputException("Discount type is required");
+        }
+        return switch (rawType.trim().toUpperCase()) {
+            case "PERCENT", DiscountCode.TYPE_PERCENTAGE -> DiscountCode.TYPE_PERCENTAGE;
+            case "FIXED", DiscountCode.TYPE_FIXED_AMOUNT -> DiscountCode.TYPE_FIXED_AMOUNT;
+            case DiscountCode.TYPE_FREE_SHIPPING -> DiscountCode.TYPE_FREE_SHIPPING;
+            default -> throw new BadInputException("Unsupported discount type: " + rawType);
+        };
     }
 }
