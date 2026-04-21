@@ -16,14 +16,14 @@ import org.monostudio.jpa.entities.ReturnRequest;
 import org.monostudio.jpa.entities.ReturnRequestItem;
 import org.monostudio.jpa.entities.StockAdjustment;
 import org.monostudio.jpa.repositories.ProductVariantsRepository;
+import org.monostudio.jpa.repositories.StockReservationsRepository;
 import org.monostudio.jpa.repositories.OrderDetailsRepository;
 import org.monostudio.jpa.repositories.ReturnRequestItemsRepository;
 import org.monostudio.jpa.repositories.ReturnRequestsRepository;
 import org.monostudio.jpa.services.conversion.ReturnRequestsConverterService;
 import org.monostudio.jpa.services.crud.ReturnRequestsCrudService;
 import org.monostudio.api.services.StockAdjustmentService;
-import org.monostudio.mailing.MailingService;
-import org.monostudio.mailing.MailingServiceException;
+import org.monostudio.mailing.kafka.KafkaMailProducer;
 import org.monostudio.payment.PaymentService;
 import org.monostudio.payment.PaymentServiceException;
 
@@ -42,11 +42,12 @@ public class ReturnRequestServiceImpl
     private final ReturnRequestsRepository returnRequestsRepository;
     private final ReturnRequestItemsRepository itemsRepository;
     private final ProductVariantsRepository productVariantsRepository;
+    private final StockReservationsRepository stockReservationsRepository;
     private final OrderDetailsRepository orderDetailsRepository;
     private final ReturnRequestsCrudService crudService;
     private final ReturnRequestsConverterService converterService;
     private final StockAdjustmentService stockAdjustmentService;
-    private final MailingService mailingService;
+    private final KafkaMailProducer kafkaMailProducer;
     private final Map<String, PaymentService> paymentServices;
     private final RefundRetryService refundRetryService;
 
@@ -55,22 +56,24 @@ public class ReturnRequestServiceImpl
         ReturnRequestsRepository returnRequestsRepository,
         ReturnRequestItemsRepository itemsRepository,
         ProductVariantsRepository productVariantsRepository,
+        StockReservationsRepository stockReservationsRepository,
         OrderDetailsRepository orderDetailsRepository,
         ReturnRequestsCrudService crudService,
         ReturnRequestsConverterService converterService,
         StockAdjustmentService stockAdjustmentService,
-        @Autowired(required = false) MailingService mailingService,
+        KafkaMailProducer kafkaMailProducer,
         @Autowired(required = false) Map<String, PaymentService> paymentServices,
         @Autowired(required = false) RefundRetryService refundRetryService
     ) {
         this.returnRequestsRepository = returnRequestsRepository;
         this.itemsRepository = itemsRepository;
         this.productVariantsRepository = productVariantsRepository;
+        this.stockReservationsRepository = stockReservationsRepository;
         this.orderDetailsRepository = orderDetailsRepository;
         this.crudService = crudService;
         this.converterService = converterService;
         this.stockAdjustmentService = stockAdjustmentService;
-        this.mailingService = mailingService;
+        this.kafkaMailProducer = kafkaMailProducer;
         this.paymentServices = paymentServices;
         this.refundRetryService = refundRetryService;
     }
@@ -89,11 +92,7 @@ public class ReturnRequestServiceImpl
 
         ReturnRequestPojo result = crudService.create(input);
         // Notify store owners of the new return request
-        try {
-            mailingService.notifyReturnRequestToOwners(result);
-        } catch (MailingServiceException e) {
-            logger.warn("Failed to send return request notification: {}", e.getMessage());
-        }
+        kafkaMailProducer.sendReturnRequestToOwners(result);
         return result;
     }
 
@@ -122,11 +121,7 @@ public class ReturnRequestServiceImpl
         ReturnRequestPojo pojo = buildReturnRequestPojo(saved, items);
 
         // Notify customer of approval
-        try {
-            mailingService.notifyReturnRequestStatusToClient(pojo);
-        } catch (MailingServiceException e) {
-            logger.warn("Failed to send return approval notification: {}", e.getMessage());
-        }
+        kafkaMailProducer.sendReturnRequestStatusToClient(pojo);
 
         return pojo;
     }
@@ -149,11 +144,7 @@ public class ReturnRequestServiceImpl
         ReturnRequest saved = returnRequestsRepository.saveAndFlush(existing);
         List<ReturnRequestItem> items = itemsRepository.findByReturnRequestId(id);
         ReturnRequestPojo pojo = buildReturnRequestPojo(saved, items);
-        try {
-            mailingService.notifyReturnRequestStatusToClient(pojo);
-        } catch (MailingServiceException e) {
-            logger.warn("Failed to send return rejection notification: {}", e.getMessage());
-        }
+        kafkaMailProducer.sendReturnRequestStatusToClient(pojo);
         return pojo;
     }
 
@@ -182,11 +173,7 @@ public class ReturnRequestServiceImpl
 
         ReturnRequest saved = returnRequestsRepository.saveAndFlush(existing);
         ReturnRequestPojo pojo = buildReturnRequestPojo(saved, items);
-        try {
-            mailingService.notifyReturnRequestStatusToClient(pojo);
-        } catch (MailingServiceException e) {
-            logger.warn("Failed to send return received notification: {}", e.getMessage());
-        }
+        kafkaMailProducer.sendReturnRequestStatusToClient(pojo);
         return pojo;
     }
 
@@ -268,11 +255,7 @@ public class ReturnRequestServiceImpl
         ReturnRequest saved = returnRequestsRepository.saveAndFlush(existing);
         List<ReturnRequestItem> items = itemsRepository.findByReturnRequestId(id);
         ReturnRequestPojo pojo = buildReturnRequestPojo(saved, items);
-        try {
-            mailingService.notifyReturnRequestStatusToClient(pojo);
-        } catch (MailingServiceException e) {
-            logger.warn("Failed to send refund complete notification: {}", e.getMessage());
-        }
+        kafkaMailProducer.sendReturnRequestStatusToClient(pojo);
         return pojo;
     }
 
@@ -331,11 +314,7 @@ public class ReturnRequestServiceImpl
         ReturnRequest saved = returnRequestsRepository.saveAndFlush(existing);
         List<ReturnRequestItem> items = itemsRepository.findByReturnRequestId(id);
         ReturnRequestPojo pojo = buildReturnRequestPojo(saved, items);
-        try {
-            mailingService.notifyReturnRequestStatusToClient(pojo);
-        } catch (MailingServiceException e) {
-            logger.warn("Failed to send refund start notification: {}", e.getMessage());
-        }
+        kafkaMailProducer.sendReturnRequestStatusToClient(pojo);
         return pojo;
     }
 
@@ -363,16 +342,33 @@ public class ReturnRequestServiceImpl
      *
      * Stock is restored ONLY at RECEIVED, not at approval — store must physically
      * receive and inspect the goods before returning them to sellable inventory.
+     *
+     * Uses atomic native SQL (restoreStock) + writes an audit log entry so the
+     * stock movement is traceable in the StockAdjustment ledger.
      */
     private void restoreVariantStock(ReturnRequestItem item) {
         // Preferred path: restore to the exact variant that was purchased
         if (item.getVariant() != null && item.getVariant().getId() != null) {
             ProductVariant variant = productVariantsRepository.getById(item.getVariant().getId());
             if (variant != null) {
-                variant.setStockCurrent(variant.getStockCurrent() + item.getQuantity());
-                productVariantsRepository.saveAndFlush(variant);
-                logger.info("Restored {} units to variant {} (return)",
-                    item.getQuantity(), variant.getSku());
+                // Atomic: stockCurrent += qty, stockReserved -= qty (for consistency)
+                stockReservationsRepository.restoreStock(variant.getId(), item.getQuantity());
+
+                // Audit trail — RETURN_RESTORED records the stock movement
+                stockAdjustmentService.recordForVariant(
+                    variant,
+                    StockAdjustment.StockAdjustmentReason.RETURN_RESTORED,
+                    item.getQuantity(),
+                    "Return received, stock restored to inventory",
+                    null,    // no cart session
+                    null,    // no order
+                    item.getReturnRequest() != null ? item.getReturnRequest().getId() : null,
+                    item.getId()
+                );
+
+                logger.info("Restored {} units to variant {} (return id={})",
+                    item.getQuantity(), variant.getSku(),
+                    item.getReturnRequest() != null ? item.getReturnRequest().getId() : "unknown");
             }
             return;
         }
@@ -386,8 +382,19 @@ public class ReturnRequestServiceImpl
         List<ProductVariant> variants = productVariantsRepository.findByProductId(item.getProduct().getId());
         for (ProductVariant variant : variants) {
             if (variant.isActive()) {
-                variant.setStockCurrent(variant.getStockCurrent() + item.getQuantity());
-                productVariantsRepository.saveAndFlush(variant);
+                stockReservationsRepository.restoreStock(variant.getId(), item.getQuantity());
+
+                stockAdjustmentService.recordForVariant(
+                    variant,
+                    StockAdjustment.StockAdjustmentReason.RETURN_RESTORED,
+                    item.getQuantity(),
+                    "Return received, stock restored to inventory (fallback — no variant recorded)",
+                    null,
+                    null,
+                    item.getReturnRequest() != null ? item.getReturnRequest().getId() : null,
+                    item.getId()
+                );
+
                 logger.info("Restored {} units to variant {} (return, fallback path)",
                     item.getQuantity(), variant.getSku());
             }

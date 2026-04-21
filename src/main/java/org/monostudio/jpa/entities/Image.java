@@ -39,7 +39,7 @@ public class Image
     @Size(min = 1, max = 50)
     @Column(name = "image_code", nullable = false, unique = true)
     private String code;
-    @Size(min = 1, max = 100)
+    @Size(min = 1, max = 255)
     @Column(name = "image_filename", nullable = false, unique = true)
     private String filename;
     @Size(min = 1, max = 500)

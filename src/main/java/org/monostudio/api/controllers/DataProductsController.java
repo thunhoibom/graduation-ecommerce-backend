@@ -22,6 +22,7 @@ import org.monostudio.jpa.services.SortSpecParserService;
 import org.monostudio.jpa.services.crud.ProductsCrudService;
 import org.monostudio.jpa.services.predicates.ProductsPredicateService;
 import org.monostudio.jpa.sortspecs.ProductsSortSpec;
+import org.monostudio.search.kafka.IndexEventProducer;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
@@ -42,6 +43,7 @@ public class DataProductsController
     private final ProductsRepository productsRepository;
     private final ProductsBulkService productsBulkService;
     private final BulkOperationsService bulkOperationsService;
+    private final IndexEventProducer indexEventProducer;
 
     @Autowired
     public DataProductsController(
@@ -51,12 +53,14 @@ public class DataProductsController
         ProductsPredicateService predicateService,
         ProductsRepository productsRepository,
         ProductsBulkService productsBulkService,
-        BulkOperationsService bulkOperationsService
+        BulkOperationsService bulkOperationsService,
+        IndexEventProducer indexEventProducer
     ) {
         super(paginationService, sortService, crudService, predicateService);
         this.productsRepository = productsRepository;
         this.productsBulkService = productsBulkService;
         this.bulkOperationsService = bulkOperationsService;
+        this.indexEventProducer = indexEventProducer;
     }
 
     @Override
@@ -126,6 +130,7 @@ public class DataProductsController
             .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
         product.setStatus(ProductStatus.PUBLISHED);
         productsRepository.saveAndFlush(product);
+        indexEventProducer.sendIndexEvent("PRODUCT", id, "UPDATE");
         return crudService.findById(id);
     }
 
@@ -145,6 +150,7 @@ public class DataProductsController
             .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
         product.setStatus(ProductStatus.UNLISTED);
         productsRepository.saveAndFlush(product);
+        indexEventProducer.sendIndexEvent("PRODUCT", id, "UPDATE");
         return crudService.findById(id);
     }
 
@@ -163,6 +169,7 @@ public class DataProductsController
             .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
         product.setStatus(ProductStatus.DRAFT);
         productsRepository.saveAndFlush(product);
+        indexEventProducer.sendIndexEvent("PRODUCT", id, "UPDATE");
         return crudService.findById(id);
     }
 

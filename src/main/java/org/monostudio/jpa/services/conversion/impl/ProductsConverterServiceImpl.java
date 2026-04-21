@@ -51,6 +51,10 @@ public class ProductsConverterServiceImpl
 
     @Override
     public ProductPojo convertToPojo(Product source) {
+        int reservedStock = source.getVariants() != null
+            ? source.getVariants().stream().mapToInt(org.monostudio.jpa.entities.ProductVariant::getStockReserved).sum()
+            : 0;
+
         ProductPojo target = ProductPojo.builder()
             .id(source.getId())
             .name(source.getName())
@@ -59,6 +63,7 @@ public class ProductsConverterServiceImpl
             .price(source.getPrice())
             .description(source.getDescription())
             .currentStock(source.getStockCurrent())
+            .reservedStock(reservedStock)
             .criticalStock(source.getStockCritical())
             .status(source.getStatus() != null ? source.getStatus().name() : ProductStatus.DRAFT.name())
             .build();

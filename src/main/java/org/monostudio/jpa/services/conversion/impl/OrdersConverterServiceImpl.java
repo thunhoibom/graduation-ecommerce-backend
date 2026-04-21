@@ -1,6 +1,8 @@
 package org.monostudio.jpa.services.conversion.impl;
 
 import org.apache.commons.lang3.StringUtils;
+import org.monostudio.jpa.entities.*;
+import org.monostudio.jpa.repositories.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,23 +14,6 @@ import org.monostudio.api.models.PersonPojo;
 import org.monostudio.api.models.ProductPojo;
 import org.monostudio.api.models.ProductVariantPojo;
 import org.monostudio.common.exceptions.BadInputException;
-import org.monostudio.jpa.entities.Address;
-import org.monostudio.jpa.entities.BillingCompany;
-import org.monostudio.jpa.entities.BillingType;
-import org.monostudio.jpa.entities.Customer;
-import org.monostudio.jpa.entities.Order;
-import org.monostudio.jpa.entities.OrderDetail;
-import org.monostudio.jpa.entities.Person;
-import org.monostudio.jpa.entities.Product;
-import org.monostudio.jpa.entities.ProductVariant;
-import org.monostudio.jpa.entities.ShippingMethod;
-import org.monostudio.jpa.repositories.AddressesRepository;
-import org.monostudio.jpa.repositories.BillingTypesRepository;
-import org.monostudio.jpa.repositories.PaymentTypesRepository;
-import org.monostudio.jpa.repositories.ProductsRepository;
-import org.monostudio.jpa.repositories.ProductVariantsRepository;
-import org.monostudio.jpa.repositories.OrderStatusesRepository;
-import org.monostudio.jpa.repositories.ShippingMethodsRepository;
 import org.monostudio.jpa.services.conversion.AddressesConverterService;
 import org.monostudio.jpa.services.conversion.BillingCompaniesConverterService;
 import org.monostudio.jpa.services.conversion.CustomersConverterService;
@@ -66,6 +51,8 @@ public class OrdersConverterServiceImpl
     private final OrderStatusesRepository orderStatusesRepository;
     private final AddressesConverterService addressesConverterService;
     private final ProductVariantsConverterService productVariantsConverterService;
+    private final UsersRepository usersRepository;
+    private final CustomersRepository customersRepository;
     static final double TAX_PERCENT = 0.19; // TODO refactor into a "tax service" of sorts
     static final String UNEXISTING_BILLING_TYPE = "Specified billing type does not exist";
 
@@ -85,7 +72,9 @@ public class OrdersConverterServiceImpl
         PaymentTypesRepository paymentTypesRepository,
         OrderStatusesRepository orderStatusesRepository,
         AddressesConverterService addressesConverterService,
-        ProductVariantsConverterService productVariantsConverterService
+        ProductVariantsConverterService productVariantsConverterService,
+        UsersRepository usersRepository,
+        CustomersRepository customersRepository
     ) {
         this.customersCrudService = customersCrudService;
         this.customersConverterService = customersConverterService;
@@ -102,6 +91,8 @@ public class OrdersConverterServiceImpl
         this.orderStatusesRepository = orderStatusesRepository;
         this.addressesConverterService = addressesConverterService;
         this.productVariantsConverterService = productVariantsConverterService;
+        this.usersRepository = usersRepository;
+        this.customersRepository = customersRepository;
     }
 
     @Override
@@ -289,18 +280,49 @@ public class OrdersConverterServiceImpl
         String paymentType = model.getPaymentType();
         if (!StringUtils.isBlank(paymentType)) {
             // Normalize common aliases
-            if (paymentType.equalsIgnoreCase("COD")) {
-                paymentType = "COD";
-            } else if (paymentType.equalsIgnoreCase("VNPAY")) {
-                paymentType = "VNPAY";
+            String normalizedName = paymentType.trim();
+            if (normalizedName.equalsIgnoreCase("COD")) {
+                normalizedName = "COD";
+            } else if (normalizedName.equalsIgnoreCase("VNPAY") || normalizedName.equalsIgnoreCase("WebPay Plus")) {
+                normalizedName = "VNPAY";
             }
 
-            String finalPaymentType = paymentType;
-            paymentTypesRepository.findByName(finalPaymentType)
-                .ifPresentOrElse(target::setPaymentType,
-                    () -> {
-                        throw new RuntimeException("The payment type '" + finalPaymentType + "' does not exist");
-                    });
+            final String finalPaymentType = normalizedName;
+            
+            // 1. Try finding by name (case-insensitive)
+            List<PaymentType> allTypes = paymentTypesRepository.findAll();
+            Optional<PaymentType> found = allTypes.stream()
+                .filter(pt -> pt.getName().equalsIgnoreCase(finalPaymentType))
+                .findFirst();
+            
+            if (found.isPresent()) {
+                target.setPaymentType(found.get());
+                return;
+            }
+
+            // 2. If name search failed but it's a common type, try finding by known IDs
+            // (Mapping based on data.sql: 1=VNPAY, 2=COD)
+            Long targetId = finalPaymentType.equals("VNPAY") ? 1L : (finalPaymentType.equals("COD") ? 2L : null);
+            if (targetId != null) {
+                Optional<PaymentType> foundById = paymentTypesRepository.findById(targetId);
+                if (foundById.isPresent()) {
+                    PaymentType pt = foundById.get();
+                    // If we found it by ID but name was different, let's update the name to be sure
+                    pt.setName(finalPaymentType);
+                    target.setPaymentType(paymentTypesRepository.save(pt));
+                    return;
+                }
+            }
+
+            // 3. Last resort: try to create it (Risk: might fail if sequence is out of sync)
+            if (finalPaymentType.equals("VNPAY") || finalPaymentType.equals("COD")) {
+                PaymentType newType = PaymentType.builder()
+                    .name(finalPaymentType)
+                    .build();
+                target.setPaymentType(paymentTypesRepository.save(newType));
+            } else {
+                throw new RuntimeException("The payment type '" + finalPaymentType + "' does not exist");
+            }
         } else {
             throw new BadInputException("A payment type has to be included");
         }
@@ -314,12 +336,42 @@ public class OrdersConverterServiceImpl
     private void convertCustomerInformationForEntity(OrderPojo model, Order target) throws BadInputException {
         PersonPojo pojoCustomer = model.getCustomer();
         Optional<Customer> existingCustomer = customersCrudService.getExisting(pojoCustomer);
-        if (existingCustomer.isEmpty()) {
-            Customer customer = customersConverterService.convertToNewEntity(pojoCustomer);
-            target.setCustomer(customer);
-        } else {
+
+        if (existingCustomer.isPresent()) {
             target.setCustomer(existingCustomer.get());
+            return;
         }
+
+        // If no Customer record exists, check if a User exists with the same email
+        if (pojoCustomer != null && StringUtils.isNotBlank(pojoCustomer.getEmail())) {
+            Optional<User> existingUser = usersRepository.findByNameWithProfile(pojoCustomer.getEmail());
+            if (existingUser.isEmpty()) {
+                // Also check by person email specifically if name != email
+                existingUser = usersRepository.findAll().stream()
+                    .filter(u -> u.getPerson() != null && pojoCustomer.getEmail().equalsIgnoreCase(u.getPerson().getEmail()))
+                    .findFirst();
+            }
+
+            if (existingUser.isPresent() && existingUser.get().getPerson() != null) {
+                Person existingPerson = existingUser.get().getPerson();
+                // Check if this Person already has a Customer record (double check)
+                Optional<Customer> customerForPerson = customersRepository.findByPersonId(existingPerson.getId());
+                if (customerForPerson.isPresent()) {
+                    target.setCustomer(customerForPerson.get());
+                } else {
+                    // Create a new Customer record pointing to the EXISTING Person
+                    Customer newCustomer = Customer.builder()
+                        .person(existingPerson)
+                        .build();
+                    target.setCustomer(customersRepository.save(newCustomer));
+                }
+                return;
+            }
+        }
+
+        // Fallback: create a brand new Customer (and new Person)
+        Customer customer = customersConverterService.convertToNewEntity(pojoCustomer);
+        target.setCustomer(customer);
     }
 
     /**

@@ -4,6 +4,7 @@ import com.querydsl.core.types.Predicate;
 import io.jsonwebtoken.lang.Maps;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.monostudio.payment.PaymentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -105,10 +106,17 @@ public class PublicCheckoutController {
         }
         String token = transactionData.get(VNPAY_TXN_REF_PARAM);
         String responseCode = transactionData.get(VNPAY_RESPONSE_CODE_PARAM);
-        
+
+        // Resolve payment service to validate callback hash/integrity
+        OrderPojo order = service.getOrderByToken(token);
+        PaymentService paymentService = service.getPaymentService(order.getPaymentType());
+        if (!paymentService.validateCallback(transactionData)) {
+            throw new PaymentServiceException("Invalid payment callback security hash");
+        }
+
         boolean isAborted = responseCode == null || !responseCode.equals("00");
         service.confirmTransaction(token, isAborted);
-        
+
         URI transactionUri = service.generateResultPageUrl(token);
         return ResponseEntity
             .status(SEE_OTHER)

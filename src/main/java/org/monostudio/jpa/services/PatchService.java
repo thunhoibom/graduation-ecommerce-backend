@@ -7,6 +7,7 @@ import java.util.Map;
 /**
  * Type-safe interface for partially modifying instances of entity classses.
  *
+ * @param <P> The Pojo class containing changes
  * @param <E> The Entity class
  */
 public interface PatchService<P, E> {
@@ -17,6 +18,7 @@ public interface PatchService<P, E> {
      * @param changes  A map containing keys and values to update with.
      * @param existing The target entity.
      * @return An updated instance of the @Entity, prepared to be saved to the database.
+     * @throws BadInputException If the object with changes has invalid values
      */
     E patchExistingEntity(Map<String, Object> changes, E existing) throws BadInputException;
 
@@ -29,7 +31,7 @@ public interface PatchService<P, E> {
      * @param existing The target entity.
      * @return An updated instance of the @Entity, prepared to be saved to the database.
      * @throws BadInputException If the object with changes has invalid values
-     * @deprecated
+     * @deprecated Use {@link #patchExistingEntity(Map, Object)} instead where possible.
      */
     @Deprecated(since = "0.2.0-SNAPSHOT", forRemoval = true)
     E patchExistingEntity(P changes, E existing) throws BadInputException;

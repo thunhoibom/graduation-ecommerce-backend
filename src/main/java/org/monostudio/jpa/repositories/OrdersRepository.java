@@ -194,4 +194,12 @@ public interface OrdersRepository
         + "WHERE o.customer.id = :customerId "
         + "ORDER BY o.date DESC")
     List<Order> findByCustomerId(@Param("customerId") Long customerId);
+
+    @Query("SELECT o FROM Order o "
+        + "LEFT JOIN FETCH o.details "
+        + "JOIN o.customer c "
+        + "JOIN c.person p "
+        + "WHERE p.email = :email "
+        + "ORDER BY o.date DESC")
+    List<Order> findByCustomerPersonEmail(@Param("email") String email);
 }

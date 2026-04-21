@@ -15,8 +15,6 @@ import org.monostudio.jpa.repositories.OrdersRepository;
 import org.monostudio.jpa.repositories.RefundRetryQueueRepository;
 import org.monostudio.payment.PaymentService;
 import org.monostudio.payment.PaymentServiceException;
-import org.monostudio.mailing.MailingService;
-import org.monostudio.mailing.MailingServiceException;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.time.Instant;
@@ -45,19 +43,16 @@ public class RefundRetryServiceImpl
     private final RefundRetryQueueRepository queueRepository;
     private final OrdersRepository ordersRepository;
     private final Map<String, PaymentService> paymentServices;
-    private final MailingService mailingService;
 
     @Autowired
     public RefundRetryServiceImpl(
         RefundRetryQueueRepository queueRepository,
         OrdersRepository ordersRepository,
-        @Autowired(required = false) Map<String, PaymentService> paymentServices,
-        @Autowired(required = false) MailingService mailingService
+        @Autowired(required = false) Map<String, PaymentService> paymentServices
     ) {
         this.queueRepository = queueRepository;
         this.ordersRepository = ordersRepository;
         this.paymentServices = paymentServices;
-        this.mailingService = mailingService;
     }
 
     // ─── Public API ────────────────────────────────────────────────────────────
@@ -226,12 +221,9 @@ public class RefundRetryServiceImpl
      * Admin must intervene manually to refund the customer.
      */
     private void sendAdminAlert(RefundRetryQueue entry, String reason) {
-        if (mailingService == null) {
-            logger.error("⚠️  REFUND PERMANENTLY FAILED — admin alert email not sent (mailing service not configured). "
-                    + "OrderId={}, Amount={}, Reason={}. Manual intervention required.",
-                entry.getOrder().getId(), entry.getAmount(), entry.getReason());
-            return;
-        }
+        logger.error("⚠️  REFUND PERMANENTLY FAILED — admin alert email not configured. "
+                + "OrderId={}, Amount={}, Reason={}. Manual intervention required.",
+            entry.getOrder().getId(), entry.getAmount(), entry.getReason());
 
         String subject = "[URGENT] Refund Permanently Failed — Order #" + entry.getOrder().getId();
         String body = String.format(

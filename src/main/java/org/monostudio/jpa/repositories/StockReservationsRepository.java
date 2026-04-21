@@ -96,15 +96,21 @@ public interface StockReservationsRepository
     int confirmDeduct(@Param("variantId") Long variantId, @Param("quantity") int quantity);
 
     /**
-     * Restore stockCurrent from a cancelled / timed-out reservation.
-     * Used when a confirmed reservation needs to be reversed (e.g. order cancelled post-payment).
+     * Restore stockCurrent AND decrement stockReserved when a paid order is cancelled or rejected.
+     * This reverses the deduction made at payment confirmation (confirmDeduct).
+     *
+     * correct invariant after cancel/reject:
+     *   stockCurrent    += quantity   (return sold units to inventory)
+     *   stockReserved  -= quantity   (clear the phantom reservation from the original cart session)
+     *
+     * @see #confirmDeduct(Long, int)  the inverse operation
      */
     @Modifying
     @Transactional
     @Query(value = """
         UPDATE product_variants
-        SET variant_stock_current = variant_stock_current + :quantity,
-            variant_stock_reserved = variant_stock_reserved + :quantity
+        SET variant_stock_current  = variant_stock_current  + :quantity,
+            variant_stock_reserved = GREATEST(variant_stock_reserved - :quantity, 0)
         WHERE variant_id = :variantId
         """, nativeQuery = true)
     void restoreStock(@Param("variantId") Long variantId, @Param("quantity") int quantity);

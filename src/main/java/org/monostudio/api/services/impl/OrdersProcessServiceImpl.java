@@ -7,8 +7,8 @@ import org.monostudio.api.models.ProductPojo;
 import org.monostudio.api.models.OrderDetailPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.models.RefundResultPojo;
-import org.monostudio.mailing.MailingService;
-import org.monostudio.mailing.MailingServiceException;
+import org.monostudio.mailing.kafka.KafkaMailProducer;
+import org.monostudio.ordering.kafka.KafkaOrderProducer;
 import org.monostudio.api.services.RefundRetryService;
 import org.monostudio.api.services.DiscountService;
 import org.monostudio.api.services.OrdersProcessService;
@@ -63,7 +63,8 @@ public class OrdersProcessServiceImpl
     private final OrderStatusesRepository orderStatusesRepository;
     private final OrdersConverterService converterService;
     private final ProductsConverterService productConverterService;
-    private final MailingService mailingService;
+    private final KafkaMailProducer kafkaMailProducer;
+    private final KafkaOrderProducer kafkaOrderProducer;
     private final StockReservationService stockReservationService;
     private final DiscountService discountService;
     private final Map<String, PaymentService> paymentServices;
@@ -78,7 +79,8 @@ public class OrdersProcessServiceImpl
         OrderStatusesRepository orderStatusesRepository,
         OrdersConverterService converterService,
         ProductsConverterService productConverterService,
-        @Autowired(required = false) MailingService mailingService,
+        KafkaMailProducer kafkaMailProducer,
+        KafkaOrderProducer kafkaOrderProducer,
         StockReservationService stockReservationService,
         DiscountService discountService,
         @Autowired(required = false) Map<String, PaymentService> paymentServices,
@@ -92,7 +94,8 @@ public class OrdersProcessServiceImpl
         this.orderStatusesRepository = orderStatusesRepository;
         this.converterService = converterService;
         this.productConverterService = productConverterService;
-        this.mailingService = mailingService;
+        this.kafkaMailProducer = kafkaMailProducer;
+        this.kafkaOrderProducer = kafkaOrderProducer;
         this.stockReservationService = stockReservationService;
         this.discountService = discountService;
         this.paymentServices = paymentServices;
@@ -102,25 +105,11 @@ public class OrdersProcessServiceImpl
     }
 
     private void sendClientEmail(OrderPojo order) {
-        if (mailingService != null) {
-            try {
-                mailingService.notifyOrderStatusToClient(order);
-            } catch (MailingServiceException e) {
-                logger.warn("Failed to send order status email to client for order {}: {}",
-                    order.getBuyOrder(), e.getMessage());
-            }
-        }
+        kafkaMailProducer.sendOrderStatusToClient(order);
     }
 
     private void sendOwnerEmail(OrderPojo order) {
-        if (mailingService != null) {
-            try {
-                mailingService.notifyOrderStatusToOwners(order);
-            } catch (MailingServiceException e) {
-                logger.warn("Failed to send order status email to owners for order {}: {}",
-                    order.getBuyOrder(), e.getMessage());
-            }
-        }
+        kafkaMailProducer.sendOrderStatusToOwners(order);
     }
 
     // TODO figure out how to shorten below methods
@@ -146,6 +135,7 @@ public class OrdersProcessServiceImpl
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
         target.setStatus(ORDER_STATUS_PAYMENT_STARTED);
+        kafkaOrderProducer.publishOrderPaymentStarted(existingOrder.getId(), existingOrder.getCartSessionToken());
         sendClientEmail(target);
         return target;
     }
@@ -180,6 +170,7 @@ public class OrdersProcessServiceImpl
         }
 
         sendClientEmail(target);
+        kafkaOrderProducer.publishOrderAborted(existingOrder.getId(), existingOrder.getCartSessionToken());
         return target;
     }
 
@@ -210,6 +201,7 @@ public class OrdersProcessServiceImpl
         }
 
         sendClientEmail(target);
+        kafkaOrderProducer.publishOrderFailed(existingOrder.getId(), existingOrder.getCartSessionToken());
         return target;
     }
 
@@ -283,17 +275,8 @@ public class OrdersProcessServiceImpl
 
         sendClientEmail(target);
         sendOwnerEmail(target);
-
-        // Clear the cart session now that payment is confirmed and stock is deducted.
-        // This prevents stale cart items from appearing if the user reuses the session token.
-        if (existingOrder.getCartSessionToken() != null) {
-            cartSessionsRepository.findByToken(existingOrder.getCartSessionToken())
-                .ifPresent(session -> {
-                    cartItemsRepository.deleteAllBySessionId(session.getId());
-                    logger.info("Cart session {} cleared after successful checkout",
-                        session.getToken());
-                });
-        }
+        // Publish ORDER_PAID event → KafkaOrderConsumer clears the cart session asynchronously
+        kafkaOrderProducer.publishOrderPaid(existingOrder.getId(), existingOrder.getCartSessionToken());
 
         return target;
     }
@@ -329,6 +312,7 @@ public class OrdersProcessServiceImpl
         target.setStatus(ORDER_STATUS_PAID_CONFIRMED);
 
         sendClientEmail(target);
+        kafkaOrderProducer.publishOrderConfirmed(existingOrder.getId());
 
         return target;
     }
@@ -346,6 +330,10 @@ public class OrdersProcessServiceImpl
         if (rejectedStatus.isEmpty()) {
             throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + ORDER_STATUS_REJECTED + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
         }
+
+        // P2: Fetch lazy-loaded fields BEFORE status update clears the persistence context
+        String paymentTypeName = existingOrder.getPaymentType() != null ? existingOrder.getPaymentType().getName() : null;
+
         ordersRepository.setStatus(existingOrder.getId(), rejectedStatus.get());
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
@@ -380,7 +368,7 @@ public class OrdersProcessServiceImpl
         }
 
         // Initiate refund for the customer since payment was already captured.
-        PaymentService paymentService = paymentServices != null ? paymentServices.get(existingOrder.getPaymentType()) : null;
+        PaymentService paymentService = (paymentServices != null && paymentTypeName != null) ? paymentServices.get(paymentTypeName) : null;
         if (existingOrder.getTransactionToken() != null && paymentService != null) {
             try {
                 RefundResultPojo result = paymentService.refund(
@@ -409,6 +397,7 @@ public class OrdersProcessServiceImpl
 
         sendClientEmail(target);
         sendOwnerEmail(target);
+        kafkaOrderProducer.publishOrderRejected(existingOrder.getId());
 
         return target;
     }
@@ -444,6 +433,7 @@ public class OrdersProcessServiceImpl
         target.setStatus(ORDER_STATUS_COMPLETED);
 
         sendClientEmail(target);
+        kafkaOrderProducer.publishOrderCompleted(existingOrder.getId());
 
         return target;
     }
@@ -476,6 +466,10 @@ public class OrdersProcessServiceImpl
                 "Status '" + ORDER_STATUS_ADMIN_CANCELLED
                     + "' not found in DB — has it been seeded?");
         }
+
+        // P2: Fetch lazy-loaded fields BEFORE status update clears the persistence context
+        String paymentTypeName = existingOrder.getPaymentType() != null ? existingOrder.getPaymentType().getName() : null;
+
         ordersRepository.setStatus(existingOrder.getId(), cancelledStatus.get());
 
         OrderPojo target = convertOrThrowException(existingOrder);
@@ -505,7 +499,7 @@ public class OrdersProcessServiceImpl
         }
 
         // If payment was already made, trigger a refund through the payment gateway.
-        PaymentService paymentService = paymentServices != null ? paymentServices.get(existingOrder.getPaymentType()) : null;
+        PaymentService paymentService = (paymentServices != null && paymentTypeName != null) ? paymentServices.get(paymentTypeName) : null;
         if (wasPaid && existingOrder.getTransactionToken() != null && paymentService != null) {
             try {
                 RefundResultPojo result = paymentService.refund(
@@ -533,6 +527,7 @@ public class OrdersProcessServiceImpl
             existingOrder.getId(), reason, wasPaid);
         sendClientEmail(target);
         sendOwnerEmail(target);
+        kafkaOrderProducer.publishOrderCancelled(existingOrder.getId());
 
         return target;
     }

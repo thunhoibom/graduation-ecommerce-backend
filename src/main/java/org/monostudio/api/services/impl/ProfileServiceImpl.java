@@ -63,27 +63,36 @@ public class ProfileServiceImpl
         throws BadInputException, UserNotFoundException {
         User targetUser = this.getUserFromName(userName);
         Person target = targetUser.getPerson();
-        if (target==null) {
+        if (target == null) {
             Optional<Person> existingProfile = peopleService.getExisting(profile);
             if (existingProfile.isPresent()) {
                 Person person = existingProfile.get();
-                Optional<User> userByIdNumber = usersRepository.findByPersonIdNumber(person.getIdNumber());
-                if (userByIdNumber.isPresent()) {
-                    throw new BadInputException("Person profile is associated to another account. Cannot use it.");
-                } else {
-                    targetUser.setPerson(person);
-                    usersRepository.saveAndFlush(targetUser);
+
+                // Check if this person is already associated with another account
+                Optional<User> userWithEmail = usersRepository.findByPersonEmail(person.getEmail());
+                Optional<User> userWithId = (person.getIdNumber() != null && !person.getIdNumber().isBlank())
+                    ? usersRepository.findByPersonIdNumber(person.getIdNumber())
+                    : Optional.empty();
+
+                if (userWithEmail.isPresent() || userWithId.isPresent()) {
+                    Long existingUserId = userWithEmail.isPresent() ? userWithEmail.get().getId() : userWithId.get().getId();
+                    if (!existingUserId.equals(targetUser.getId())) {
+                        throw new BadInputException("Person profile is associated to another account. Cannot use it.");
+                    }
                 }
+
+                target = person;
+                targetUser.setPerson(target);
+                usersRepository.saveAndFlush(targetUser);
             } else {
-                Person newProfile = peopleConverter.convertToNewEntity(profile);
-                newProfile = peopleRepository.saveAndFlush(newProfile);
-                targetUser.setPerson(newProfile);
+                target = peopleConverter.convertToNewEntity(profile);
+                target = peopleRepository.saveAndFlush(target);
+                targetUser.setPerson(target);
                 usersRepository.saveAndFlush(targetUser);
             }
-        } else {
-            target = peoplePatchService.patchExistingEntity(profile, target);
-            peopleRepository.saveAndFlush(target);
         }
+        target = peoplePatchService.patchExistingEntity(profile, target);
+        peopleRepository.saveAndFlush(target);
     }
 
     private User getUserFromName(String userName)

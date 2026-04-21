@@ -21,6 +21,7 @@ import org.monostudio.jpa.services.crud.CrudGenericService;
 import org.monostudio.jpa.services.crud.ImagesCrudService;
 import org.monostudio.jpa.services.crud.ProductsCrudService;
 import org.monostudio.jpa.services.patch.ProductsPatchService;
+import org.monostudio.search.kafka.IndexEventProducer;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
@@ -39,6 +40,7 @@ public class ProductsCrudServiceImpl
     private final ProductImagesRepository productImagesRepository;
     private final ProductsCategoriesRepository productsCategoriesRepository;
     private final ImagesCrudService imagesCrudService;
+    private final IndexEventProducer indexEventProducer;
     private final Logger logger = LoggerFactory.getLogger(ProductsCrudServiceImpl.class);
 
     @Autowired
@@ -48,7 +50,8 @@ public class ProductsCrudServiceImpl
         ProductsPatchService productsPatchService,
         ProductImagesRepository productImagesRepository,
         ProductsCategoriesRepository productsCategoriesRepository,
-        ImagesCrudService imagesCrudService
+        ImagesCrudService imagesCrudService,
+        IndexEventProducer indexEventProducer
     ) {
         super(productsRepository, productsConverterService, productsPatchService);
         this.productsRepository = productsRepository;
@@ -56,6 +59,7 @@ public class ProductsCrudServiceImpl
         this.imagesCrudService = imagesCrudService;
         this.productImagesRepository = productImagesRepository;
         this.productsCategoriesRepository = productsCategoriesRepository;
+        this.indexEventProducer = indexEventProducer;
     }
 
 
@@ -75,6 +79,8 @@ public class ProductsCrudServiceImpl
             target.setImages(targetPojoImages);
             target.setPrimaryImageUrl(productsConverterService.extractPrimaryImageUrl(persistentProductImages));
         }
+
+        indexEventProducer.sendIndexEvent("PRODUCT", persistent.getId(), "CREATE");
         return target;
     }
 
@@ -121,9 +127,17 @@ public class ProductsCrudServiceImpl
             target.setImages(targetPojoImages);
             target.setPrimaryImageUrl(productsConverterService.extractPrimaryImageUrl(persistentProductImages));
         }
+
+        indexEventProducer.sendIndexEvent("PRODUCT", persistent.getId(), "UPDATE");
         return Optional.of(target);
     }
 
+
+    @Override
+    public void delete(Long id) throws EntityNotFoundException {
+        super.delete(id);
+        indexEventProducer.sendIndexEvent("PRODUCT", id, "DELETE");
+    }
 
     @Override
     public ProductPojo readOne(Predicate filters)

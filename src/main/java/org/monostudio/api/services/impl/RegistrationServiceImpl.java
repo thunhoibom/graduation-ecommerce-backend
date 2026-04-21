@@ -63,34 +63,51 @@ public class RegistrationServiceImpl
         }
 
         PersonPojo sourcePerson = registration.getProfile();
+        String email = sourcePerson.getEmail();
+        String idNumber = sourcePerson.getIdNumber();
 
         // Check email uniqueness — required for account recovery
-        String email = sourcePerson.getEmail();
-        if (email != null && peopleRepository.findByEmail(email).isPresent()) {
+        if (email != null && usersRepository.findByPersonEmail(email).isPresent()) {
             throw new EntityExistsException("An account with this email already exists.");
         }
 
-        // Check idNumber only if provided (optional for guest-to-registered upgrade)
-        String idNumber = sourcePerson.getIdNumber();
+        // Check idNumber uniqueness
         if (idNumber != null && !idNumber.isBlank()) {
-            Predicate sameIdNumber = QPerson.person.idNumber.eq(idNumber);
-            if (peopleRepository.exists(sameIdNumber)) {
+            if (usersRepository.findByPersonIdNumber(idNumber).isPresent()) {
                 throw new EntityExistsException("That ID number is already registered and associated to an account.");
             }
         }
 
-        Person newPerson = peopleConverterService.convertToNewEntity(sourcePerson);
-        newPerson = peopleRepository.saveAndFlush(newPerson);
+        // Find existing person to reuse (from guest orders) or create new one
+        Person personToUse;
+        Optional<Person> existingPerson = Optional.empty();
+        if (email != null) {
+            existingPerson = peopleRepository.findByEmail(email);
+        }
+        if (existingPerson.isEmpty() && idNumber != null && !idNumber.isBlank()) {
+            existingPerson = peopleRepository.findByIdNumber(idNumber);
+        }
+
+        if (existingPerson.isPresent()) {
+            personToUse = existingPerson.get();
+            // Optional: update person info if needed
+        } else {
+            personToUse = peopleConverterService.convertToNewEntity(sourcePerson);
+            personToUse = peopleRepository.saveAndFlush(personToUse);
+        }
 
         User newUser = this.convertToUser(registration);
-        newUser.setPerson(newPerson);
+        newUser.setPerson(personToUse);
         usersRepository.saveAndFlush(newUser);
         // Credential info not logged — security best practice
 
-        Customer newCustomer = Customer.builder()
-            .person(newPerson)
-            .build();
-        customersRepository.saveAndFlush(newCustomer);
+        // Ensure Customer record exists for this person
+        if (customersRepository.findByPersonId(personToUse.getId()).isEmpty()) {
+            Customer newCustomer = Customer.builder()
+                .person(personToUse)
+                .build();
+            customersRepository.saveAndFlush(newCustomer);
+        }
     }
 
     protected User convertToUser(RegistrationPojo registration) {

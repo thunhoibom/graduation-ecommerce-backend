@@ -29,7 +29,13 @@ public class ProductPojo {
     @NotNull
     private Integer price;
     private Integer currentStock;
+    private Integer reservedStock;
     private Integer criticalStock;
+
+    public Integer getAvailableStock() {
+        if (currentStock == null) return 0;
+        return currentStock - (reservedStock != null ? reservedStock : 0);
+    }
     private ProductCategoryPojo category;
     private Collection<ImagePojo> images;
 

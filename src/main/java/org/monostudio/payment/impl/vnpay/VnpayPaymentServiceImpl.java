@@ -39,7 +39,6 @@ public class VnpayPaymentServiceImpl implements PaymentService {
         try {
             String vnp_Version = "2.1.0";
             String vnp_Command = "pay";
-            String orderType = "other";
             long amount = transaction.getTotalValue() * 100L;
             
             // Generate a unique token for this transaction if null, otherwise use transaction token
@@ -54,7 +53,7 @@ public class VnpayPaymentServiceImpl implements PaymentService {
             
             vnp_Params.put("vnp_TxnRef", vnp_TxnRef);
             vnp_Params.put("vnp_OrderInfo", "Thanh toan don hang:" + vnp_TxnRef);
-            vnp_Params.put("vnp_OrderType", orderType);
+            vnp_Params.put("vnp_OrderType", "190000"); // Standard category code for 'other'
 
             vnp_Params.put("vnp_Locale", "vn");
             vnp_Params.put("vnp_ReturnUrl", config.getReturnUrl());
@@ -69,33 +68,11 @@ public class VnpayPaymentServiceImpl implements PaymentService {
             String vnp_ExpireDate = formatter.format(cld.getTime());
             vnp_Params.put("vnp_ExpireDate", vnp_ExpireDate);
             
-            List<String> fieldNames = new ArrayList<>(vnp_Params.keySet());
-            Collections.sort(fieldNames);
-            StringBuilder hashData = new StringBuilder();
-            StringBuilder query = new StringBuilder();
-            Iterator<String> itr = fieldNames.iterator();
-            while (itr.hasNext()) {
-                String fieldName = itr.next();
-                String fieldValue = vnp_Params.get(fieldName);
-                if ((fieldValue != null) && (fieldValue.length() > 0)) {
-                    // Build hash data
-                    hashData.append(fieldName);
-                    hashData.append('=');
-                    hashData.append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII.toString()));
-                    // Build query
-                    query.append(URLEncoder.encode(fieldName, StandardCharsets.US_ASCII.toString()));
-                    query.append('=');
-                    query.append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII.toString()));
-                    if (itr.hasNext()) {
-                        query.append('&');
-                        hashData.append('&');
-                    }
-                }
-            }
-            String queryUrl = query.toString();
-            String vnp_SecureHash = VnpayUtil.hmacSHA512(config.getHashSecret(), hashData.toString());
-            queryUrl += "&vnp_SecureHash=" + vnp_SecureHash;
-            String paymentUrl = config.getUrl() + "?" + queryUrl;
+            String queryUrl = buildQueryString(vnp_Params);
+            String hashData = buildHashData(vnp_Params);
+            String vnp_SecureHash = VnpayUtil.hmacSHA512(config.getHashSecret(), hashData);
+            
+            String paymentUrl = config.getUrl() + "?" + queryUrl + "&vnp_SecureHash=" + vnp_SecureHash;
 
             PaymentRedirectionDetailsPojo response = new PaymentRedirectionDetailsPojo();
             response.setUrl(paymentUrl);
@@ -107,17 +84,74 @@ public class VnpayPaymentServiceImpl implements PaymentService {
         }
     }
 
+    private String buildQueryString(Map<String, String> params) throws Exception {
+        List<String> fieldNames = new ArrayList<>(params.keySet());
+        Collections.sort(fieldNames);
+        StringBuilder query = new StringBuilder();
+        Iterator<String> itr = fieldNames.iterator();
+        while (itr.hasNext()) {
+            String fieldName = itr.next();
+            String fieldValue = params.get(fieldName);
+            if ((fieldValue != null) && (fieldValue.length() > 0)) {
+                query.append(URLEncoder.encode(fieldName, StandardCharsets.UTF_8.toString()));
+                query.append('=');
+                query.append(URLEncoder.encode(fieldValue, StandardCharsets.UTF_8.toString()).replace("+", "%20"));
+                if (itr.hasNext()) {
+                    query.append('&');
+                }
+            }
+        }
+        return query.toString();
+    }
+
+    private String buildHashData(Map<String, String> params) throws Exception {
+        List<String> fieldNames = new ArrayList<>(params.keySet());
+        Collections.sort(fieldNames);
+        StringBuilder hashData = new StringBuilder();
+        Iterator<String> itr = fieldNames.iterator();
+        while (itr.hasNext()) {
+            String fieldName = itr.next();
+            String fieldValue = params.get(fieldName);
+            if ((fieldValue != null) && (fieldValue.length() > 0)) {
+                hashData.append(fieldName);
+                hashData.append('=');
+                hashData.append(URLEncoder.encode(fieldValue, StandardCharsets.UTF_8.toString()).replace("+", "%20"));
+                if (itr.hasNext()) {
+                    hashData.append('&');
+                }
+            }
+        }
+        return hashData.toString();
+    }
+
+    @Override
+    public boolean validateCallback(Map<String, String> fields) {
+        String vnp_SecureHash = fields.get("vnp_SecureHash");
+        if (vnp_SecureHash == null || vnp_SecureHash.isEmpty()) {
+            return false;
+        }
+
+        Map<String, String> vnp_Params = new HashMap<>(fields);
+        vnp_Params.remove("vnp_SecureHash");
+        vnp_Params.remove("vnp_SecureHashType");
+        
+        try {
+            String hashData = buildHashData(vnp_Params);
+            String calculatedHash = VnpayUtil.hmacSHA512(config.getHashSecret(), hashData);
+            return calculatedHash.equalsIgnoreCase(vnp_SecureHash);
+        } catch (Exception e) {
+            logger.error("Error verifying VNPAY hash", e);
+            return false;
+        }
+    }
+
     @Override
     public int requestPaymentResult(String transactionToken) throws PaymentServiceException {
-        // Since VNPAY uses the unified callback (handled in PublicCheckoutController by looking at vnp_ResponseCode),
-        // we essentially just simulate a 0 (success) if the token exists, or we leave logic to controller.
-        // For standard interface implementation, assume it's valid if asked.
         return 0; // Success code mapping internally
     }
 
     @Override
     public PaymentResultPojo requestPaymentResultWithAmount(String transactionToken) throws PaymentServiceException {
-        // Mocked for sandbox, or would query VNPAY API
         PaymentResultPojo response = new PaymentResultPojo();
         response.setResponseCode(0);
         response.setAuthorizedAmount(0); // Not validating exact amount for sandbox mock
@@ -131,12 +165,10 @@ public class VnpayPaymentServiceImpl implements PaymentService {
 
     @Override
     public RefundResultPojo refund(String transactionToken, int amount) throws PaymentServiceException {
-        // Sandbox mock: return success
         RefundResultPojo refundResult = new RefundResultPojo();
         refundResult.setSuccess(true);
         refundResult.setResponseCode(0);
         refundResult.setType("VNPAY_SANDBOX_REFUND");
-        // Balance left unknown/mocked
         refundResult.setBalance(0L);
         return refundResult;
     }

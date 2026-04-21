@@ -6,8 +6,10 @@ import java.util.Map;
 
 /**
  * An interface for parsing Predicates for use in JPA queries
+ *
+ * @param <E> The Entity class
  */
-public interface PredicateService {
+public interface PredicateService<E> {
 
     /**
      * Reads Map and creates filtering conditions based on its data

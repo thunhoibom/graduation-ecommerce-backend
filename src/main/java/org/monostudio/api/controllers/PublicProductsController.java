@@ -19,7 +19,10 @@ import org.monostudio.jpa.services.predicates.ProductsPredicateService;
 import org.monostudio.jpa.sortspecs.ProductsSortSpec;
 
 import jakarta.persistence.EntityNotFoundException;
+import org.monostudio.search.models.ProductDocument;
+import org.monostudio.search.services.SearchService;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -35,18 +38,21 @@ public class PublicProductsController {
     private final ProductsPredicateService productsPredicateService;
     private final PaginationService paginationService;
     private final SortSpecParserService sortService;
+    private final SearchService searchService;
 
     @Autowired
     public PublicProductsController(
         ProductsCrudService productsCrudService,
         ProductsPredicateService productsPredicateService,
         PaginationService paginationService,
-        SortSpecParserService sortService
+        SortSpecParserService sortService,
+        SearchService searchService
     ) {
         this.productsCrudService = productsCrudService;
         this.productsPredicateService = productsPredicateService;
         this.paginationService = paginationService;
         this.sortService = sortService;
+        this.searchService = searchService;
     }
 
     /**
@@ -95,5 +101,41 @@ public class PublicProductsController {
             // Re-throw as 404 — do not reveal whether product exists but is hidden
             throw new EntityNotFoundException("Product not found: " + barcode);
         }
+    }
+
+    /**
+     * Search products using Elasticsearch for full-text search capabilities.
+     * Supports pagination, price filtering, and sorting.
+     */
+    @GetMapping("/search")
+    @Operation(summary = "Full-text search for products using Elasticsearch")
+    public DataPagePojo<ProductDocument> searchProducts(@RequestParam Map<String, String> params) {
+        String query = params.getOrDefault("q", "");
+        int pageIndex = paginationService.determineRequestedPageIndex(params);
+        int pageSize = paginationService.determineRequestedPageSize(params);
+        
+        Integer minPrice = null;
+        if (params.containsKey("minPrice")) {
+            try { minPrice = Integer.parseInt(params.get("minPrice")); } catch (Exception ignored) {}
+        }
+        Integer maxPrice = null;
+        if (params.containsKey("maxPrice")) {
+            try { maxPrice = Integer.parseInt(params.get("maxPrice")); } catch (Exception ignored) {}
+        }
+
+        String category = params.get("category");
+
+        var sort = sortService.parse(ProductsSortSpec.ORDER_SPEC_MAP, params);
+        
+        return searchService.searchProducts(
+                query,
+                minPrice,
+                maxPrice,
+                category,
+                ProductStatus.PUBLISHED.name(),
+                pageIndex,
+                pageSize,
+                sort
+        );
     }
 }

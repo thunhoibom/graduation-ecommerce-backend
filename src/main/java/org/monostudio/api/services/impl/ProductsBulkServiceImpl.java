@@ -12,6 +12,7 @@ import org.monostudio.jpa.entities.ProductStatus;
 import org.monostudio.jpa.repositories.ProductImagesRepository;
 import org.monostudio.jpa.repositories.ProductsCategoriesRepository;
 import org.monostudio.jpa.repositories.ProductsRepository;
+import org.monostudio.search.kafka.IndexEventProducer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -36,15 +37,18 @@ public class ProductsBulkServiceImpl implements ProductsBulkService {
     private final ProductsRepository productsRepository;
     private final ProductsCategoriesRepository categoriesRepository;
     private final ProductImagesRepository productImagesRepository;
+    private final IndexEventProducer indexEventProducer;
 
     public ProductsBulkServiceImpl(
         ProductsRepository productsRepository,
         ProductsCategoriesRepository categoriesRepository,
-        ProductImagesRepository productImagesRepository
+        ProductImagesRepository productImagesRepository,
+        IndexEventProducer indexEventProducer
     ) {
         this.productsRepository = productsRepository;
         this.categoriesRepository = categoriesRepository;
         this.productImagesRepository = productImagesRepository;
+        this.indexEventProducer = indexEventProducer;
     }
 
     @Override
@@ -132,6 +136,11 @@ public class ProductsBulkServiceImpl implements ProductsBulkService {
         if (!toSave.isEmpty()) {
             List<Product> saved = productsRepository.saveAll(toSave);
             successCount = saved.size();
+            
+            // Trigger Kafka events for all imported products
+            saved.forEach(product -> 
+                indexEventProducer.sendIndexEvent("PRODUCT", product.getId(), "UPDATE")
+            );
         }
 
         return ProductCsvImportResult.builder()

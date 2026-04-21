@@ -1,0 +1,47 @@
+package org.monostudio.search.models;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.elasticsearch.annotations.Document;
+import org.springframework.data.elasticsearch.annotations.Field;
+import org.springframework.data.elasticsearch.annotations.FieldType;
+import org.springframework.data.elasticsearch.annotations.Setting;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Document(indexName = "products")
+@Setting(settingPath = "elasticsearch/settings.json") // Optional: for custom analyzers
+public class ProductDocument {
+
+    @Id
+    private String id;
+
+    @Field(type = FieldType.Text, analyzer = "standard_vietnamese", copyTo = "all")
+    private String name;
+
+    @Field(type = FieldType.Keyword)
+    private String barcode;
+
+    @Field(type = FieldType.Text, analyzer = "standard_vietnamese", copyTo = "all")
+    private String description;
+
+    @Field(type = FieldType.Integer)
+    private Integer price;
+
+    @Field(type = FieldType.Keyword)
+    private String categoryName;
+
+    @Field(type = FieldType.Keyword)
+    private String status;
+
+    @Field(type = FieldType.Keyword)
+    private String primaryImageUrl;
+
+    @Field(type = FieldType.Text, analyzer = "standard_vietnamese")
+    private String all; // For multi-field search
+}

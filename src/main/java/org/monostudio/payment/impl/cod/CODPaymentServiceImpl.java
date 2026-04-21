@@ -62,4 +62,9 @@ public class CODPaymentServiceImpl
             .responseCode(0)
             .build();
     }
+
+    @Override
+    public boolean validateCallback(java.util.Map<String, String> transactionData) {
+        return true;
+    }
 }

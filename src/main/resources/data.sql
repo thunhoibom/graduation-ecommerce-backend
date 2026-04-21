@@ -98,7 +98,11 @@ VALUES
 (51, 'product_lists:create'),
 (52, 'product_lists:update'),
 (53, 'product_lists:read'),
-(54, 'product_lists:contents');
+(54, 'product_lists:contents'),
+(55, 'blog:delete'),
+(56, 'blog:create'),
+(57, 'blog:update'),
+(58, 'blog:read');
 
 INSERT INTO `app_user_role_permissions`
 (`permission_id`, `user_role_id`)
@@ -156,7 +160,11 @@ VALUES
 (51, 01),
 (52, 01),
 (53, 01),
-(54, 01);
+(54, 01),
+(55, 01),
+(56, 01),
+(57, 01),
+(58, 01);
 
 INSERT INTO `app_user_role_permissions`
 (`permission_id`, `user_role_id`)
@@ -191,7 +199,11 @@ VALUES
 (51, 02),
 (52, 02),
 (53, 02),
-(54, 02);
+(54, 02),
+(55, 02),
+(56, 02),
+(57, 02),
+(58, 02);
 
 INSERT INTO `app_user_role_permissions`
 (`permission_id`, `user_role_id`)

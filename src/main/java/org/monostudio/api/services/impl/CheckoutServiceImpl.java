@@ -407,6 +407,16 @@ public class CheckoutServiceImpl
         return outcome;
     }
 
+    @Override
+    public OrderPojo getOrderByToken(String token) throws EntityNotFoundException {
+        return this.getSellRequestedWithMatchingToken(token);
+    }
+
+    @Override
+    public org.monostudio.payment.PaymentService getPaymentService(String paymentType) {
+        return paymentServices.get(paymentType);
+    }
+
     private OrderPojo getSellRequestedWithMatchingToken(String transactionToken) throws EntityNotFoundException {
         Map<String, String> startedWithTokenMatcher = new HashMap<>(Map.of(
             "statusCode", ORDER_STATUS_PAYMENT_STARTED,

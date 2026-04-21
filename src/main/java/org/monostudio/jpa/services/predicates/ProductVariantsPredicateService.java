@@ -1,5 +1,6 @@
 package org.monostudio.jpa.services.predicates;
 
+import org.monostudio.jpa.entities.ProductVariant;
 import org.monostudio.jpa.entities.QProductVariant;
 import org.monostudio.jpa.services.PredicateService;
 
@@ -9,6 +10,6 @@ import org.monostudio.jpa.services.PredicateService;
  * during the maven compile phase and placed in target/generated-sources/java.
  */
 public interface ProductVariantsPredicateService
-    extends PredicateService {
+    extends PredicateService<ProductVariant> {
     QProductVariant basePath = QProductVariant.productVariant;
 }

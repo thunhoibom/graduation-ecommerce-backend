@@ -59,4 +59,13 @@ public interface CheckoutService {
      * @return The "completed/failed" URI to redirect consumer to
      */
     URI generateResultPageUrl(String transactionToken);
+    /**
+     * From a given token, retrieve the corresponding order.
+     */
+    OrderPojo getOrderByToken(String token) throws EntityNotFoundException;
+
+    /**
+     * Get the payment service for a given payment type key.
+     */
+    org.monostudio.payment.PaymentService getPaymentService(String paymentType);
 }

@@ -62,6 +62,27 @@ public class PeoplePatchServiceImpl
 
     @Override
     public Person patchExistingEntity(PersonPojo changes, Person existing) throws BadInputException {
-        throw new UnsupportedOperationException("This method signature has been deprecated");
+        Person target = new Person(existing);
+
+        if (changes.getFirstName() != null && !StringUtils.isBlank(changes.getFirstName())) {
+            target.setFirstName(changes.getFirstName());
+        }
+        if (changes.getLastName() != null && !StringUtils.isBlank(changes.getLastName())) {
+            target.setLastName(changes.getLastName());
+        }
+        if (changes.getIdNumber() != null && !StringUtils.isBlank(changes.getIdNumber())) {
+            target.setIdNumber(changes.getIdNumber());
+        }
+        if (changes.getEmail() != null && !StringUtils.isBlank(changes.getEmail())) {
+            target.setEmail(changes.getEmail());
+        }
+        if (changes.getPhone1() != null) {
+            target.setPhone1(changes.getPhone1());
+        }
+        if (changes.getPhone2() != null) {
+            target.setPhone2(changes.getPhone2());
+        }
+
+        return target;
     }
 }

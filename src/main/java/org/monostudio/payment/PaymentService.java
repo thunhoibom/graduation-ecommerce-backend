@@ -53,4 +53,11 @@ public interface PaymentService {
      * @throws PaymentServiceException On gateway error or communication failure.
      */
     RefundResultPojo refund(String transactionToken, int amount) throws PaymentServiceException;
+    /**
+     * Validate the callback data sent from the external payment gateway.
+     *
+     * @param transactionData The parameters sent in the callback request.
+     * @return true if the callback data is valid and authorized, false otherwise.
+     */
+    boolean validateCallback(java.util.Map<String, String> transactionData);
 }

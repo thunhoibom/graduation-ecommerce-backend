@@ -35,10 +35,14 @@ public class PeopleCrudServiceImpl
     @Override
     public Optional<Person> getExisting(PersonPojo input) throws BadInputException {
         String idCard = input.getIdNumber();
-        if (StringUtils.isBlank(idCard)) {
-            throw new BadInputException("Customer does not have ID card");
-        } else {
+        String email = input.getEmail();
+
+        if (StringUtils.isNotBlank(idCard)) {
             return peopleRepository.findByIdNumber(idCard);
+        } else if (StringUtils.isNotBlank(email)) {
+            return peopleRepository.findByEmail(email);
         }
+
+        return Optional.empty();
     }
 }

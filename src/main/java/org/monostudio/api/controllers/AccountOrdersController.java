@@ -2,6 +2,7 @@ package org.monostudio.api.controllers;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.monostudio.jpa.repositories.UsersRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -19,8 +20,10 @@ import org.monostudio.jpa.repositories.CustomersRepository;
 import org.monostudio.jpa.repositories.OrdersRepository;
 import org.monostudio.jpa.services.conversion.OrdersConverterService;
 
+import org.monostudio.jpa.repositories.PeopleRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.security.Principal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,6 +36,8 @@ public class AccountOrdersController {
     private final OrdersRepository ordersRepository;
     private final OrdersConverterService ordersConverterService;
     private final CustomersRepository customersRepository;
+    private final UsersRepository usersRepository;
+    private final PeopleRepository peopleRepository;
     private final UserDetailsService userDetailsService;
 
     @Autowired
@@ -40,11 +45,15 @@ public class AccountOrdersController {
         OrdersRepository ordersRepository,
         OrdersConverterService ordersConverterService,
         CustomersRepository customersRepository,
+        UsersRepository usersRepository,
+        PeopleRepository peopleRepository,
         UserDetailsService userDetailsService
     ) {
         this.ordersRepository = ordersRepository;
         this.ordersConverterService = ordersConverterService;
         this.customersRepository = customersRepository;
+        this.usersRepository = usersRepository;
+        this.peopleRepository = peopleRepository;
         this.userDetailsService = userDetailsService;
     }
 
@@ -67,19 +76,29 @@ public class AccountOrdersController {
         Principal principal
     ) throws UserNotFoundException, EntityNotFoundException {
         Customer customer = resolveCustomer(principal);
+        String email = customer.getPerson().getEmail();
+        
+        // Find all orders linked to this customer OR any customer sharing the same person email
         List<org.monostudio.jpa.entities.Order> allOrders =
-            ordersRepository.findByCustomerId(customer.getId());
-
-        if (allOrders.isEmpty()) {
-            throw new EntityNotFoundException("No orders found for this account");
-        }
+            ordersRepository.findByCustomerPersonEmail(email);
 
         int idx = pageIndex != null ? pageIndex : 0;
         int size = pageSize != null ? pageSize : 20;
 
+        DataPagePojo<OrderPojo> result = new DataPagePojo<>();
+        result.setPageSize(size);
+
+        if (allOrders.isEmpty()) {
+            result.setItems(List.of());
+            result.setTotalCount(0);
+            return result;
+        }
+
         int fromIndex = idx * size;
         if (fromIndex >= allOrders.size()) {
-            throw new EntityNotFoundException("No orders found for this account");
+            result.setItems(List.of());
+            result.setTotalCount(allOrders.size());
+            return result;
         }
 
         int toIndex = Math.min(fromIndex + size, allOrders.size());
@@ -89,7 +108,6 @@ public class AccountOrdersController {
             .map(ordersConverterService::convertToPojo)
             .toList();
 
-        DataPagePojo<OrderPojo> result = new DataPagePojo<>();
         result.setItems(pojos);
         result.setTotalCount(allOrders.size());
         result.setPageSize(size);
@@ -115,8 +133,13 @@ public class AccountOrdersController {
                 .orElseThrow(() -> new EntityNotFoundException(
                     "Order not found: " + buyOrder));
 
-        // Security: ensure the order belongs to the authenticated customer
-        if (!order.getCustomer().getId().equals(customer.getId())) {
+        // Security: ensure the order belongs to the authenticated customer.
+        // We use email comparison to be consistent with listMyOrders, 
+        // since a single person might have multiple customer IDs (e.g. from guest orders).
+        String userEmail = customer.getPerson().getEmail();
+        String orderEmail = order.getCustomer().getPerson().getEmail();
+
+        if (userEmail == null || !userEmail.equalsIgnoreCase(orderEmail)) {
             throw new EntityNotFoundException("Order not found: " + buyOrder);
         }
 
@@ -132,7 +155,9 @@ public class AccountOrdersController {
      */
     private Customer resolveCustomer(Principal principal) throws UserNotFoundException {
         String username = principal.getName();
-        User user = (User) userDetailsService.loadUserByUsername(username);
+        User user = usersRepository.findByNameWithProfile(username)
+            .orElseThrow(() -> new UserNotFoundException("User not found: " + username));
+
         if (user.getPerson() == null) {
             throw new UserNotFoundException("User has no associated person profile");
         }

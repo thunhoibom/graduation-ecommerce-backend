@@ -7,6 +7,7 @@ import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Product;
 import org.monostudio.jpa.entities.ProductStatus;
 import org.monostudio.jpa.repositories.ProductsRepository;
+import org.monostudio.search.kafka.IndexEventProducer;
 
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
@@ -20,13 +21,16 @@ public class BulkOperationsServiceImpl implements BulkOperationsService {
 
     private final ProductsRepository productsRepository;
     private final ProductsCrudService productsCrudService;
+    private final IndexEventProducer indexEventProducer;
 
     public BulkOperationsServiceImpl(
         ProductsRepository productsRepository,
-        ProductsCrudService productsCrudService
+        ProductsCrudService productsCrudService,
+        IndexEventProducer indexEventProducer
     ) {
         this.productsRepository = productsRepository;
         this.productsCrudService = productsCrudService;
+        this.indexEventProducer = indexEventProducer;
     }
 
     @Override
@@ -54,6 +58,7 @@ public class BulkOperationsServiceImpl implements BulkOperationsService {
                     .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
                 product.setStatus(newStatus);
                 productsRepository.save(product);
+                indexEventProducer.sendIndexEvent("PRODUCT", id, "UPDATE");
                 successCount++;
             } catch (EntityNotFoundException e) {
                 errors.add("ID " + id + ": " + e.getMessage());

@@ -24,4 +24,7 @@ public interface UsersRepository
 
     @Query("SELECT u FROM User u JOIN FETCH u.person p WHERE p.idNumber = :idNumber")
     Optional<User> findByPersonIdNumber(@Param("idNumber") String idNumber);
+
+    @Query("SELECT u FROM User u JOIN FETCH u.person p WHERE p.email = :email")
+    Optional<User> findByPersonEmail(@Param("email") String email);
 }

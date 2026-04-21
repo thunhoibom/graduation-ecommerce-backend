@@ -40,7 +40,11 @@ public class MinioStorageServiceImpl implements StorageService {
 
     @Override
     public ImagePojo uploadImage(MultipartFile file) {
-        String filename = UUID.randomUUID().toString() + "_" + file.getOriginalFilename();
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename != null && originalFilename.length() > 210) {
+            originalFilename = originalFilename.substring(originalFilename.length() - 210);
+        }
+        String filename = UUID.randomUUID().toString() + "_" + (originalFilename != null ? originalFilename : "unnamed");
         try {
             minioClient.putObject(
                     PutObjectArgs.builder()

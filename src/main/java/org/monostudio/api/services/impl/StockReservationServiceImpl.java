@@ -14,8 +14,7 @@ import org.monostudio.jpa.entities.StockAdjustment;
 import org.monostudio.jpa.repositories.ProductVariantsRepository;
 import org.monostudio.jpa.repositories.StockReservationsRepository;
 import org.monostudio.api.services.StockAdjustmentService;
-import org.monostudio.mailing.MailingService;
-import org.monostudio.mailing.MailingServiceException;
+import org.monostudio.mailing.kafka.KafkaMailProducer;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,19 +31,19 @@ public class StockReservationServiceImpl
     private final StockReservationsRepository stockReservationsRepository;
     private final ProductVariantsRepository productVariantsRepository;
     private final StockAdjustmentService stockAdjustmentService;
-    private final MailingService mailingService;
+    private final KafkaMailProducer kafkaMailProducer;
 
     @Autowired
     public StockReservationServiceImpl(
         StockReservationsRepository stockReservationsRepository,
         ProductVariantsRepository productVariantsRepository,
         StockAdjustmentService stockAdjustmentService,
-        @Autowired(required = false) MailingService mailingService
+        KafkaMailProducer kafkaMailProducer
     ) {
         this.stockReservationsRepository = stockReservationsRepository;
         this.productVariantsRepository = productVariantsRepository;
         this.stockAdjustmentService = stockAdjustmentService;
-        this.mailingService = mailingService;
+        this.kafkaMailProducer = kafkaMailProducer;
     }
 
     // ─── Legacy Long-based methods (used by OrdersProcessServiceImpl) ─────────────
@@ -172,14 +171,10 @@ public class StockReservationServiceImpl
         if (newAvailable <= refreshed.getStockCritical()) {
             logger.warn("Variant '{}' (id={}) reached low-stock threshold: available={}, critical={}",
                 variantSku, variantId, newAvailable, refreshed.getStockCritical());
-            try {
-                String productName = refreshed.getProduct() != null
-                    ? refreshed.getProduct().getName()
-                    : "Variant #" + variantId;
-                mailingService.notifyLowStockAlert(productName, newAvailable);
-            } catch (MailingServiceException e) {
-                logger.warn("Failed to send low-stock alert for variant {}: {}", variantSku, e.getMessage());
-            }
+            String productName = refreshed.getProduct() != null
+                ? refreshed.getProduct().getName()
+                : "Variant #" + variantId;
+            kafkaMailProducer.sendLowStockAlert(productName, newAvailable);
         }
 
         return toPojo(saved);
@@ -443,8 +438,9 @@ public class StockReservationServiceImpl
             return;
         }
 
-        // restoreStock does: stockCurrent += quantity, stockReserved += quantity
-        // This reverses the deduction made at payment confirmation.
+        // restoreStock reverses confirmDeduct:
+        //   stockCurrent  += quantity  (return sold units to inventory)
+        //   stockReserved -= quantity  (clear the phantom reservation from the original cart session)
         stockReservationsRepository.restoreStock(variant.getId(), quantity);
 
         // Log audit trail

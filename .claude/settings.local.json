@@ -28,7 +28,12 @@
       "Bash(ls /home/)",
       "Read(//c/Users/Nguyen/**)",
       "Bash(ls \"D:/GRADUATION_PROJECT/graduation_ecommerce/graduation-ecommerce-backend/src/main/java/org/monostudio\")",
-      "Read(//d/GRADUATION_PROJECT/graduation_ecommerce/**)"
+      "Read(//d/GRADUATION_PROJECT/graduation_ecommerce/**)",
+      "Bash(curl *)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(c.get\\('id'\\), c.get\\('person',{}\\).get\\('email','NO EMAIL'\\)\\) for c in data.get\\('items',data if isinstance\\(data,list\\) else []\\)]\")",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\('id:', o.get\\('id'\\), 'status:', o.get\\('status'\\), 'customer:', o.get\\('customer',{}\\).get\\('email','null'\\) if o.get\\('customer'\\) else 'null'\\) for o in \\(data.get\\('items',[]\\) if isinstance\\(data,dict\\) else []\\)]\")",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\('id:', o.get\\('id'\\), 'email:', o.get\\('customer',{}\\).get\\('email'\\) if o.get\\('customer'\\) else 'null'\\) for o in data.get\\('items',[]\\)]\")",
+      "Bash(python -c ' *)"
     ]
   }
 }
