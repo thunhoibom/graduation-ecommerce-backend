@@ -26,6 +26,8 @@ public class ProductVariantsPatchServiceImpl
     public ProductVariant patchExistingEntity(Map<String, Object> changes, ProductVariant existing)
         throws BadInputException {
         ProductVariant target = new ProductVariant(existing);
+        target.setProduct(existing.getProduct());
+        target.setImages(existing.getImages());
 
         if (changes.containsKey("sku")) {
             String sku = (String) changes.get("sku");

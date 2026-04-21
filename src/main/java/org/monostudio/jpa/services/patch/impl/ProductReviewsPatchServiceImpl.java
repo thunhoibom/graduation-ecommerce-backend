@@ -17,6 +17,10 @@ public class ProductReviewsPatchServiceImpl
     @Override
     public ProductReview patchExistingEntity(Map<String, Object> changes, ProductReview existing) throws BadInputException {
         ProductReview target = new ProductReview(existing);
+        target.setProduct(existing.getProduct());
+        target.setCustomer(existing.getCustomer());
+        target.setImages(existing.getImages());
+        target.setReplies(existing.getReplies());
 
         if (changes.containsKey("rating")) {
             Integer rating = (Integer) changes.get("rating");

@@ -12,7 +12,20 @@ import java.util.Optional;
 public interface ProductsCategoriesRepository
     extends Repository<ProductCategory> {
 
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"image", "parent", "parent.image"})
     Optional<ProductCategory> findByCode(String code);
+
+    @Override
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"image", "parent", "parent.image"})
+    java.util.List<ProductCategory> findAll();
+
+    @Override
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"image", "parent", "parent.image"})
+    org.springframework.data.domain.Page<ProductCategory> findAll(org.springframework.data.domain.Pageable pageable);
+
+    @Override
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"image", "parent", "parent.image"})
+    org.springframework.data.domain.Page<ProductCategory> findAll(com.querydsl.core.types.Predicate predicate, org.springframework.data.domain.Pageable pageable);
 
     List<ProductCategory> findByName(String code);
 

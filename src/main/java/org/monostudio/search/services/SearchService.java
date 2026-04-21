@@ -3,6 +3,7 @@ package org.monostudio.search.services;
 import co.elastic.clients.elasticsearch._types.query_dsl.ChildScoreMode;
 import co.elastic.clients.elasticsearch._types.query_dsl.QueryBuilders;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.monostudio.api.models.DataPagePojo;
 import org.monostudio.search.models.ProductDocument;
 import org.monostudio.search.repositories.ProductSearchRepository;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class SearchService {
 
@@ -36,6 +38,9 @@ public class SearchService {
             int pageSize,
             Sort sort
     ) {
+        log.info("[ES DEBUG] Searching with keyword: '{}', category: '{}', price: {}-{}", 
+                 keyword, category, minPrice, maxPrice);
+
         // Map JPA-style sort properties to Elasticsearch fields
         Sort esSort = Sort.by(sort.stream().map(order -> {
             String property = order.getProperty();
@@ -61,7 +66,7 @@ public class SearchService {
 
                             // Filter by category
                             if (category != null && !category.isBlank()) {
-                                b.filter(f -> f.term(t -> t.field("categoryName").value(category)));
+                                b.filter(f -> f.term(t -> t.field("categoryCodes").value(category)));
                             }
 
                             // Range filter for price
@@ -83,6 +88,8 @@ public class SearchService {
                 .map(SearchHit::getContent)
                 .collect(Collectors.toList());
         
+        log.info("[ES DEBUG] Search finished. Hits: {}", searchHits.getTotalHits());
+
         return new DataPagePojo<>(items, pageIndex, searchHits.getTotalHits(), pageSize);
     }
 

@@ -19,6 +19,8 @@ public class CartSessionsPatchServiceImpl
     public CartSession patchExistingEntity(Map<String, Object> changes, CartSession existing)
         throws BadInputException {
         CartSession target = new CartSession(existing);
+        target.setCustomer(existing.getCustomer());
+        target.setItems(existing.getItems());
 
         if (changes.containsKey("expiresAt")) {
             Object val = changes.get("expiresAt");

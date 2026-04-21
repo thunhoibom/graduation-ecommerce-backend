@@ -14,6 +14,10 @@ import org.monostudio.search.repositories.BlogPostSearchRepository;
 import org.monostudio.search.repositories.ProductSearchRepository;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @Slf4j
@@ -28,6 +32,7 @@ public class ElasticsearchSyncConsumer {
     private final ProductsConverterService productsConverterService;
 
     @KafkaListener(topics = "search-indexing-topic", groupId = "search-sync-group")
+    @Transactional(readOnly = true)
     public void consumeIndexEvent(IndexEvent event) {
         log.info("Received index event from Kafka: {}", event);
 
@@ -52,6 +57,7 @@ public class ElasticsearchSyncConsumer {
                         .description(product.getDescription())
                         .price(product.getPrice())
                         .categoryName(product.getProductCategory() != null ? product.getProductCategory().getName() : null)
+                        .categoryCodes(extractCategoryHierarchy(product.getProductCategory()))
                         .status(product.getStatus() != null ? product.getStatus().name() : null)
                         .primaryImageUrl(productsConverterService.extractPrimaryImageUrl(
                                 productImagesRepository.deepFindProductImagesByProductIdOrdered(product.getId())
@@ -74,6 +80,16 @@ public class ElasticsearchSyncConsumer {
                 log.info("Indexed BlogPost: {}", doc.getId());
             });
         }
+    }
+
+    private List<String> extractCategoryHierarchy(org.monostudio.jpa.entities.ProductCategory category) {
+        List<String> codes = new ArrayList<>();
+        org.monostudio.jpa.entities.ProductCategory current = category;
+        while (current != null) {
+            codes.add(current.getCode());
+            current = current.getParent();
+        }
+        return codes;
     }
 
     private void handleDelete(IndexEvent event) {

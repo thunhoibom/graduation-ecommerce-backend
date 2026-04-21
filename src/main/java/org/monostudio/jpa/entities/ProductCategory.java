@@ -63,6 +63,7 @@ public class ProductCategory
         this.id = source.id;
         this.code = source.code;
         this.name = source.name;
+        this.image = source.image;
         this.parent = null;
     }
 

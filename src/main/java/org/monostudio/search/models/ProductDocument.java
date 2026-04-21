@@ -37,6 +37,9 @@ public class ProductDocument {
     private String categoryName;
 
     @Field(type = FieldType.Keyword)
+    private java.util.List<String> categoryCodes;
+
+    @Field(type = FieldType.Keyword)
     private String status;
 
     @Field(type = FieldType.Keyword)

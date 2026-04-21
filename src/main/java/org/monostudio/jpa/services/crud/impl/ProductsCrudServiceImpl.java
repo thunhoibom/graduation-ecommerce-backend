@@ -86,6 +86,12 @@ public class ProductsCrudServiceImpl
 
     @Override
     public Optional<ProductPojo> update(ProductPojo input, Long id) throws EntityNotFoundException, BadInputException {
+        Optional<ProductPojo> pojo = this.fullUpdateProduct(input, id);
+        pojo.ifPresent(p -> indexEventProducer.sendIndexEvent("PRODUCT", p.getId(), "UPDATE"));
+        return pojo;
+    }
+
+    private Optional<ProductPojo> fullUpdateProduct(ProductPojo input, Long id) throws EntityNotFoundException, BadInputException {
         Product existing = productsRepository.findById(id)
             .orElseThrow(() -> new EntityNotFoundException(ITEM_NOT_FOUND));
 
@@ -128,8 +134,21 @@ public class ProductsCrudServiceImpl
             target.setPrimaryImageUrl(productsConverterService.extractPrimaryImageUrl(persistentProductImages));
         }
 
-        indexEventProducer.sendIndexEvent("PRODUCT", persistent.getId(), "UPDATE");
         return Optional.of(target);
+    }
+
+    @Override
+    public Optional<ProductPojo> partialUpdate(java.util.Map<String, Object> changes, Long id) {
+        Optional<ProductPojo> pojo = super.partialUpdate(changes, id);
+        pojo.ifPresent(p -> indexEventProducer.sendIndexEvent("PRODUCT", p.getId(), "UPDATE"));
+        return pojo;
+    }
+
+    @Override
+    public Optional<ProductPojo> partialUpdate(java.util.Map<String, Object> changes, com.querydsl.core.types.Predicate filters) {
+        Optional<ProductPojo> pojo = super.partialUpdate(changes, filters);
+        pojo.ifPresent(p -> indexEventProducer.sendIndexEvent("PRODUCT", p.getId(), "UPDATE"));
+        return pojo;
     }
 
 

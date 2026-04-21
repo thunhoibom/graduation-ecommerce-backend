@@ -19,6 +19,9 @@ public class ProductsPatchServiceImpl
     @Override
     public Product patchExistingEntity(Map<String, Object> changes, Product existing) throws BadInputException {
         Product target = new Product(existing);
+        target.setVariants(existing.getVariants());
+        target.setReviews(existing.getReviews());
+        target.setProductCategory(existing.getProductCategory());
 
         if (changes.containsKey("barcode")) {
             String barcode = (String) changes.get("barcode");

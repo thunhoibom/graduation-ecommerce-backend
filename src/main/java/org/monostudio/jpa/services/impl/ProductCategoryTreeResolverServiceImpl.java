@@ -31,7 +31,9 @@ public class ProductCategoryTreeResolverServiceImpl
     public List<ProductCategory> getBranchesFromRoot(ProductCategory rootBranch) {
         int maxAllowedDepth = apiProperties.getMaxCategoryFetchingRecursionDepth();
         List<ProductCategory> immediateDescendants = repository.findByParent(rootBranch);
-        List<ProductCategory> allBranches = new ArrayList<>(immediateDescendants);
+        List<ProductCategory> allBranches = new ArrayList<>();
+        allBranches.add(rootBranch); // Include root!
+        allBranches.addAll(immediateDescendants);
         for (ProductCategory branch : immediateDescendants) {
             this.recursivelyAddBranches(allBranches, branch, maxAllowedDepth);
         }
@@ -42,7 +44,10 @@ public class ProductCategoryTreeResolverServiceImpl
     public List<Long> getBranchIdsFromRootId(Long rootId) {
         int depth = apiProperties.getMaxCategoryFetchingRecursionDepth();
         List<Long> immediateDescendantIds = repository.findIdsByParentId(rootId);
-        List<Long> allBranchIds = new ArrayList<>(immediateDescendantIds);
+        List<Long> allBranchIds = new ArrayList<>();
+        allBranchIds.add(rootId); // Include the root itself!
+        allBranchIds.addAll(immediateDescendantIds);
+        
         for (Long bId : immediateDescendantIds) {
             this.recursivelyAddBranchIds(allBranchIds, bId, depth);
         }

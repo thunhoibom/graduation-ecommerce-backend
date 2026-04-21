@@ -35,6 +35,12 @@ public interface OrdersRepository
         + "WHERE s.id = :id")
     int setTransactionToken(@Param("id") Long id, @Param("token") String token);
 
+    @Modifying
+    @Query("UPDATE Order s "
+        + "SET s.trackingNumber = :trackingNumber, s.shipperCode = :shipperCode "
+        + "WHERE s.id = :id")
+    int setTracking(@Param("id") Long id, @Param("trackingNumber") String trackingNumber, @Param("shipperCode") String shipperCode);
+
     // ─── Admin Dashboard Queries ──────────────────────────────────────────────
 
     /**

@@ -108,6 +108,12 @@ public class Order
     @Column(name = "order_cart_session_token")
     private String cartSessionToken;
 
+    @Column(name = "order_tracking_number")
+    private String trackingNumber;
+
+    @Column(name = "order_shipper_code")
+    private String shipperCode;
+
     /**
      * Total amount already refunded for this order (in cents).
      * Used to ensure cumulative refunds do not exceed the order's totalValue.
@@ -150,5 +156,7 @@ public class Order
         this.salesperson = null;
         this.cartSessionToken = source.cartSessionToken;
         this.totalRefundedAmount = source.totalRefundedAmount;
+        this.trackingNumber = source.trackingNumber;
+        this.shipperCode = source.shipperCode;
     }
 }

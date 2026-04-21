@@ -48,9 +48,6 @@ public class ProductCategoriesCrudServiceImpl
     @Override
     protected final ProductCategory flushPartialChanges(Map<String, Object> changes, ProductCategory existingEntity) throws BadInputException {
         ProductCategory preparedEntity = categoriesPatchService.patchExistingEntity(changes, existingEntity);
-        if (existingEntity.getParent()!=null) {
-            preparedEntity.setParent(existingEntity.getParent());
-        }
         if (existingEntity.equals(preparedEntity)) {
             return existingEntity;
         }

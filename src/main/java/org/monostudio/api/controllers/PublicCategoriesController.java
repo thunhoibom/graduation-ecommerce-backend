@@ -11,6 +11,7 @@ import org.monostudio.api.models.CategoryTreePojo;
 import org.monostudio.api.models.ProductCategoryPojo;
 import org.monostudio.jpa.entities.ProductCategory;
 import org.monostudio.jpa.repositories.ProductsCategoriesRepository;
+import org.monostudio.jpa.services.conversion.ImagesConverterService;
 import org.monostudio.jpa.services.CategoryEnrichmentService;
 
 import jakarta.persistence.EntityNotFoundException;
@@ -31,14 +32,17 @@ public class PublicCategoriesController {
 
     private final ProductsCategoriesRepository categoriesRepository;
     private final CategoryEnrichmentService categoryEnrichmentService;
+    private final ImagesConverterService imagesConverterService;
 
     @Autowired
     public PublicCategoriesController(
         ProductsCategoriesRepository categoriesRepository,
-        CategoryEnrichmentService categoryEnrichmentService
+        CategoryEnrichmentService categoryEnrichmentService,
+        ImagesConverterService imagesConverterService
     ) {
         this.categoriesRepository = categoriesRepository;
         this.categoryEnrichmentService = categoryEnrichmentService;
+        this.imagesConverterService = imagesConverterService;
     }
 
     /**
@@ -95,6 +99,8 @@ public class PublicCategoriesController {
                 .id(entity.getParent().getId())
                 .code(entity.getParent().getCode())
                 .name(entity.getParent().getName())
+                .imageUrl(entity.getParent().getImage() != null ? entity.getParent().getImage().getUrl() : null)
+                .image(entity.getParent().getImage() != null ? imagesConverterService.convertToPojo(entity.getParent().getImage()) : null)
                 .build();
         }
 
@@ -104,6 +110,7 @@ public class PublicCategoriesController {
             .name(entity.getName())
             .parent(parentPojo)
             .imageUrl(entity.getImage() != null ? entity.getImage().getUrl() : null)
+            .image(entity.getImage() != null ? imagesConverterService.convertToPojo(entity.getImage()) : null)
             .children(new ArrayList<>())
             .build();
 

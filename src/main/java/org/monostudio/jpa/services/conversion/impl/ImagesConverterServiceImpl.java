@@ -29,6 +29,7 @@ public class ImagesConverterServiceImpl
     @Override
     public Image convertToNewEntity(ImagePojo source) {
         return Image.builder()
+            .id(source.getId())
             .code(source.getCode())
             .filename(source.getFilename())
             .url(source.getUrl())

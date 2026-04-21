@@ -49,8 +49,11 @@ public class ProductsPredicateServiceImpl
                     case "nameLike":
                         predicate.and(basePath.name.likeIgnoreCase("%" + stringValue + "%"));
                         break;
+                    case "category":
                     case "categoryCode":
                         List<Long> branchIds = categoryTreeResolver.getBranchIdsFromRootCode(stringValue);
+                        logger.info("[JPA DEBUG] Search code: '{}', IDs found: {}", stringValue, branchIds);
+                        
                         predicate.and(basePath.productCategory.code.eq(stringValue)
                             .or(basePath.productCategory.id.in(branchIds)));
                         break;

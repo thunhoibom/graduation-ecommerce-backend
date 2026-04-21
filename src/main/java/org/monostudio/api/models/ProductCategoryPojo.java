@@ -32,4 +32,7 @@ public class ProductCategoryPojo {
 
     @JsonInclude(NON_NULL)
     private String imageUrl;
+
+    @JsonInclude(NON_NULL)
+    private ImagePojo image;
 }
