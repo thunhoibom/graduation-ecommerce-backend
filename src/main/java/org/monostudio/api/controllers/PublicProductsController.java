@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.monostudio.api.models.DataPagePojo;
 import org.monostudio.api.models.ProductPojo;
+import org.monostudio.api.models.WeatherCategoryRecommendationPojo;
 import org.monostudio.api.services.PaginationService;
 import org.monostudio.jpa.entities.ProductStatus;
 import org.monostudio.jpa.services.SortSpecParserService;
@@ -141,5 +142,17 @@ public class PublicProductsController {
                 pageSize,
                 sort
         );
+    }
+
+    @GetMapping("/recommendations/weather-category")
+    @Operation(summary = "Get weather-aware recommendations for one category")
+    public WeatherCategoryRecommendationPojo getWeatherCategoryRecommendations(
+            @RequestParam("category") String categoryCode,
+            @RequestParam(value = "lat", required = false) Double latitude,
+            @RequestParam(value = "lon", required = false) Double longitude,
+            @RequestParam(value = "limit", defaultValue = "12") Integer limit
+    ) {
+        int safeLimit = (limit == null || limit <= 0) ? 12 : Math.min(limit, 30);
+        return searchService.recommendByWeatherAndCategory(categoryCode, latitude, longitude, safeLimit);
     }
 }

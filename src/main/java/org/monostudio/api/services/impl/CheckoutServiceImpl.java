@@ -6,16 +6,17 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.apache.commons.lang3.StringUtils;
 import org.monostudio.api.models.CartItemPojo;
+import org.monostudio.api.models.CartPricingResult;
 import org.monostudio.api.models.CheckoutStartRequest;
-import org.monostudio.api.models.DiscountValidationResult;
 import org.monostudio.api.models.OrderDetailPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.PaymentResultPojo;
 import org.monostudio.api.services.AdminNotificationService;
+import org.monostudio.api.services.CartPricingService;
 import org.monostudio.api.services.CheckoutService;
-import org.monostudio.api.services.DiscountService;
 import org.monostudio.api.services.OrdersProcessService;
 import org.monostudio.api.services.StockReservationService;
 import org.monostudio.api.services.ShippingMethodsService;
@@ -27,6 +28,7 @@ import org.monostudio.jpa.entities.Product;
 import org.monostudio.jpa.entities.ProductVariant;
 import org.monostudio.jpa.entities.ShippingMethod;
 import org.monostudio.jpa.repositories.CartSessionsRepository;
+import org.monostudio.jpa.repositories.CustomersRepository;
 import org.monostudio.jpa.repositories.OrderDetailsRepository;
 import org.monostudio.jpa.repositories.OrdersRepository;
 import org.monostudio.jpa.repositories.ProductsRepository;
@@ -54,8 +56,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.monostudio.config.Constants.ORDER_STATUS_PAYMENT_STARTED;
-import static org.monostudio.jpa.entities.DiscountCode.TYPE_FREE_SHIPPING;
-
 @Service
 public class CheckoutServiceImpl
     implements CheckoutService {
@@ -73,7 +73,8 @@ public class CheckoutServiceImpl
     private final OrdersRepository ordersRepository;
     private final Map<String, PaymentService> paymentServices;
     private final StockReservationService stockReservationService;
-    private final DiscountService discountService;
+    private final CartPricingService cartPricingService;
+    private final CustomersRepository customersRepository;
     private final ShippingMethodsService shippingMethodsService;
     private final PaymentCallbackLogRepository paymentCallbackLogRepository;
     private final AdminNotificationService adminNotificationService;
@@ -95,7 +96,8 @@ public class CheckoutServiceImpl
         OrdersRepository ordersRepository,
         Map<String, PaymentService> paymentServices,
         StockReservationService stockReservationService,
-        DiscountService discountService,
+        CartPricingService cartPricingService,
+        CustomersRepository customersRepository,
         ShippingMethodsService shippingMethodsService,
         PaymentCallbackLogRepository paymentCallbackLogRepository,
         AdminNotificationService adminNotificationService
@@ -113,7 +115,8 @@ public class CheckoutServiceImpl
         this.ordersRepository = ordersRepository;
         this.paymentServices = paymentServices;
         this.stockReservationService = stockReservationService;
-        this.discountService = discountService;
+        this.cartPricingService = cartPricingService;
+        this.customersRepository = customersRepository;
         this.shippingMethodsService = shippingMethodsService;
         this.paymentCallbackLogRepository = paymentCallbackLogRepository;
         this.adminNotificationService = adminNotificationService;
@@ -188,23 +191,18 @@ public class CheckoutServiceImpl
         Double lng = request.getShippingAddress() != null ? request.getShippingAddress().getLongitude() : null;
         int shippingFee = shippingMethodsService.computeRate(shippingMethod, subtotal, lat, lng).getFee();
 
-        // ── 6. Validate discount (do NOT redeem here — redemption happens at markAsPaid) ──
-        // Note: customerId is null here — per-customer limit check runs at markAsPaid
-        // when the actual customer is resolved from the order.
-        DiscountValidationResult discountResult = discountService.validateDiscount(
-            request.getDiscountCode(), subtotal, null
+        // ── 6. Pricing (promotion rules + optional coupon) — same logic as POST /public/cart/calculate ──
+        Long checkoutCustomerId = resolveCustomerIdForCheckout(request);
+        CartPricingResult pricing = cartPricingService.calculateForSession(
+            cart, request.getDiscountCode(), checkoutCustomerId
         );
-        if (!discountResult.isValid()) {
-            throw new BadInputException("Discount error: " + discountResult.getMessage());
-        }
 
-        // FREE_SHIPPING: override shipping fee to 0 after base free-threshold check
-        boolean freeShippingDiscount = TYPE_FREE_SHIPPING.equals(discountResult.getType());
+        boolean freeShippingDiscount = Boolean.TRUE.equals(pricing.getFreeShipping());
         if (freeShippingDiscount) {
             shippingFee = 0;
         }
 
-        int discountAmount = discountResult.getDiscountAmount();
+        int discountAmount = pricing.getDiscountAmount() != null ? pricing.getDiscountAmount() : 0;
 
         // ── 7. Build OrderPojo ───────────────────────────────────────────────────
         OrderPojo orderPojo = OrderPojo.builder()
@@ -220,7 +218,9 @@ public class CheckoutServiceImpl
             .billingAddress(request.getBillingAddress())
             .shipper(shippingMethod.getName())
             .details(orderDetails)
-            .discountCode(discountResult.isValid() ? request.getDiscountCode() : null)
+            .discountCode(StringUtils.isNotBlank(pricing.getAppliedDiscountCode())
+                ? pricing.getAppliedDiscountCode()
+                : null)
             .discountValue(discountAmount)
             .cartSessionToken(request.getSessionToken())
             .build();
@@ -435,6 +435,14 @@ public class CheckoutServiceImpl
             "token", transactionToken));
         Predicate startedTransactionWithMatchingToken = ordersPredicateService.parseMap(startedWithTokenMatcher);
         return ordersCrudService.readOne(startedTransactionWithMatchingToken);
+    }
+
+    private Long resolveCustomerIdForCheckout(CheckoutStartRequest request) {
+        if (request.getCustomer() == null || StringUtils.isBlank(request.getCustomer().getEmail())) {
+            return null;
+        }
+        var matches = customersRepository.findAllByPersonEmail(request.getCustomer().getEmail().trim());
+        return matches.isEmpty() ? null : matches.get(0).getId();
     }
 
     /**

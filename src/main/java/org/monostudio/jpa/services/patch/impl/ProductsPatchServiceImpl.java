@@ -49,15 +49,8 @@ public class ProductsPatchServiceImpl
             }
         }
 
-        if (changes.containsKey("currentStock")) {
-            Integer currentStock = (Integer) changes.get("currentStock");
-            target.setStockCurrent(currentStock);
-        }
-
-        if (changes.containsKey("criticalStock")) {
-            Integer criticalStock = (Integer) changes.get("criticalStock");
-            target.setStockCritical(criticalStock);
-        }
+        // Stock fields are variant-owned in the current domain model.
+        // Ignore product-level stock patch inputs to avoid data divergence.
 
         if (changes.containsKey("status")) {
             Object statusRaw = changes.get("status");

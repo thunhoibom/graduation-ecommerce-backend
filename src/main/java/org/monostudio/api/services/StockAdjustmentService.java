@@ -93,6 +93,16 @@ public interface StockAdjustmentService {
     List<StockAdjustmentPojo> getByVariant(Long variantId, int page, int size);
 
     /**
+     * Retrieves adjustments for a variant identified by SKU with pagination.
+     *
+     * @param sku  Variant SKU
+     * @param page Page number (0-based)
+     * @param size Page size
+     * @return Page of adjustments
+     */
+    List<StockAdjustmentPojo> getBySku(String sku, int page, int size);
+
+    /**
      * Retrieves all adjustments for an order.
      *
      * @param orderId The order ID
@@ -127,4 +137,45 @@ public interface StockAdjustmentService {
      * @return Page of adjustments
      */
     List<StockAdjustmentPojo> getAll(int page, int size);
+
+    /**
+     * Applies a manual stock delta on a variant and records the audit entry.
+     * This method updates variant stockCurrent and writes to stock_adjustments atomically.
+     *
+     * @param variantId      Variant ID
+     * @param quantityDelta  Positive (inbound), negative (outbound)
+     * @param reason         Stock adjustment reason enum
+     * @param description    Required business reason text for traceability
+     * @param orderId        Optional related order id
+     * @param performedBy    Optional user id
+     * @return Created adjustment entry
+     */
+    StockAdjustmentPojo applyManualDelta(
+        Long variantId,
+        int quantityDelta,
+        StockAdjustment.StockAdjustmentReason reason,
+        String description,
+        Long orderId,
+        Long performedBy
+    );
+
+    /**
+     * Sets a manual target stock level and records the implied delta.
+     *
+     * @param variantId      Variant ID
+     * @param targetStock    Absolute stock target
+     * @param reason         Stock adjustment reason enum
+     * @param description    Required business reason text for traceability
+     * @param orderId        Optional related order id
+     * @param performedBy    Optional user id
+     * @return Created adjustment entry
+     */
+    StockAdjustmentPojo applyManualTargetStock(
+        Long variantId,
+        int targetStock,
+        StockAdjustment.StockAdjustmentReason reason,
+        String description,
+        Long orderId,
+        Long performedBy
+    );
 }

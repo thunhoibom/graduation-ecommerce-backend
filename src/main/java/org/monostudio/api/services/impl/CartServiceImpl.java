@@ -123,6 +123,7 @@ public class CartServiceImpl
         cartItemsRepository.saveAndFlush(item);
         logger.info("Added item {} (qty={}) to cart session {}", variantSku, quantity, sessionToken);
 
+        clearPricingSnapshot(session);
         return getCart(sessionToken);
     }
 
@@ -160,6 +161,7 @@ public class CartServiceImpl
 
         logger.info("Updated cart item {} qty {} -> {} (session={})",
             variantSku, oldQuantity, quantity, sessionToken);
+        clearPricingSnapshot(session);
         return getCart(sessionToken);
     }
 
@@ -185,6 +187,7 @@ public class CartServiceImpl
         }
 
         logger.info("Removed item {} from cart session {}", variantSku, sessionToken);
+        clearPricingSnapshot(session);
         return getCart(sessionToken);
     }
 
@@ -203,6 +206,7 @@ public class CartServiceImpl
         cartItemsRepository.deleteAllBySessionId(session.getId());
         cartItemsRepository.flush();
 
+        clearPricingSnapshot(session);
         logger.info("Cleared cart session {}", sessionToken);
     }
 
@@ -247,6 +251,16 @@ public class CartServiceImpl
 
     // ─── Private helpers ────────────────────────────────────────────────────────
 
+    private void clearPricingSnapshot(CartSession session) {
+        if (session == null) {
+            return;
+        }
+        session.setAppliedDiscountCode(null);
+        session.setDiscountAmount(null);
+        session.setAppliedPromotionsJson(null);
+        cartSessionsRepository.saveAndFlush(session);
+    }
+
     private CartSession getOrCreateCartSession(String sessionToken) {
         return cartSessionsRepository.findByToken(sessionToken)
             .orElseGet(() -> createNewSession(sessionToken));
@@ -275,6 +289,9 @@ public class CartServiceImpl
             totalUnits += item.getQuantity();
         }
 
+        Integer discount = session.getDiscountAmount();
+        int afterDiscount = Math.max(0, subtotal - (discount != null ? discount : 0));
+
         return CartSessionPojo.builder()
             .id(session.getId())
             .token(session.getToken())
@@ -282,6 +299,10 @@ public class CartServiceImpl
             .subtotal(subtotal)
             .itemCount(itemPojos.size())
             .totalUnits(totalUnits)
+            .appliedDiscountCode(session.getAppliedDiscountCode())
+            .discountAmount(discount)
+            .totalAfterDiscount(afterDiscount)
+            .appliedPromotionsJson(session.getAppliedPromotionsJson())
             .createdAt(session.getCreatedAt())
             .updatedAt(session.getUpdatedAt())
             .build();

@@ -1,5 +1,6 @@
 package org.monostudio.api.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -17,6 +18,7 @@ import static com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(NON_NULL)
 public class ProductPojo {
     private Long id;
@@ -28,8 +30,20 @@ public class ProductPojo {
     private String description;
     @NotNull
     private Integer price;
+    /**
+     * Aggregate stock across active variants.
+     * Read-only for variant-based products.
+     */
     private Integer currentStock;
+    /**
+     * Aggregate reserved stock across active variants.
+     * Read-only for variant-based products.
+     */
     private Integer reservedStock;
+    /**
+     * Aggregate low-stock threshold across active variants.
+     * Read-only for variant-based products.
+     */
     private Integer criticalStock;
 
     public Integer getAvailableStock() {

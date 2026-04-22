@@ -99,6 +99,18 @@ public class CartSession
     @Column(name = "session_expires_at", nullable = false)
     private LocalDateTime expiresAt;
 
+    @Column(name = "session_applied_discount_code", length = 50)
+    private String appliedDiscountCode;
+
+    @Column(name = "session_discount_amount")
+    private Integer discountAmount;
+
+    /**
+     * JSON array of applied promotion breakdown (for UI transparency).
+     */
+    @Column(name = "session_applied_promotions_json", length = 4000)
+    private String appliedPromotionsJson;
+
     /**
      * Copy-constructor — does NOT copy items collection.
      *

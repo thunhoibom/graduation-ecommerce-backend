@@ -49,6 +49,7 @@ public class RedisCacheConfig {
         ttlByCache.put(CacheNames.PUBLIC_CATEGORY_BY_CODE, defaultConfig.entryTtl(Duration.ofMinutes(10)));
         ttlByCache.put(CacheNames.PUBLIC_SHIPPING_METHODS, defaultConfig.entryTtl(Duration.ofMinutes(5)));
         ttlByCache.put(CacheNames.PUBLIC_DISCOUNT_VALIDATION, defaultConfig.entryTtl(Duration.ofMinutes(2)));
+        ttlByCache.put(CacheNames.ACTIVE_PROMOTION_RULES, defaultConfig.entryTtl(Duration.ofMinutes(3)));
         ttlByCache.put(CacheNames.ADMIN_DASHBOARD_STATS, defaultConfig.entryTtl(Duration.ofSeconds(60)));
         ttlByCache.put(CacheNames.ADMIN_REVENUE_STATS, defaultConfig.entryTtl(Duration.ofSeconds(60)));
         ttlByCache.put(CacheNames.ADMIN_TOP_PRODUCTS, defaultConfig.entryTtl(Duration.ofSeconds(60)));

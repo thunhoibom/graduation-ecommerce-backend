@@ -286,6 +286,62 @@ public class VariantsBulkServiceImpl implements VariantsBulkService {
             .build();
     }
 
+    @Override
+    @Transactional
+    public BulkOperationResult bulkUpdate(
+        List<Long> ids,
+        Integer priceModifier,
+        Integer currentStock,
+        Boolean active
+    ) {
+        if (ids == null || ids.isEmpty()) {
+            return BulkOperationResult.builder()
+                .successCount(0).errorCount(0).build();
+        }
+
+        if (priceModifier == null && currentStock == null && active == null) {
+            return BulkOperationResult.builder()
+                .successCount(0)
+                .errorCount(1)
+                .errors(List.of("At least one field must be provided: priceModifier, currentStock, active"))
+                .build();
+        }
+
+        List<String> errors = new ArrayList<>();
+        int success = 0;
+
+        for (Long id : ids) {
+            try {
+                Optional<ProductVariant> optionalVariant = variantsRepository.findById(id);
+                if (optionalVariant.isEmpty()) {
+                    errors.add("ID " + id + ": variant not found");
+                    continue;
+                }
+
+                ProductVariant variant = optionalVariant.get();
+                if (priceModifier != null) {
+                    variant.setPriceModifier(priceModifier);
+                }
+                if (currentStock != null) {
+                    variant.setStockCurrent(currentStock);
+                }
+                if (active != null) {
+                    variant.setActive(active);
+                }
+                variantsRepository.save(variant);
+                success++;
+            } catch (Exception e) {
+                errors.add("ID " + id + ": " + e.getMessage());
+            }
+        }
+
+        return BulkOperationResult.builder()
+            .successCount(success)
+            .errorCount(errors.size())
+            .errors(errors.isEmpty() ? null : errors)
+            .build();
+    }
+
     // ── Field helpers ─────────────────────────────────────────────────────────
 
     private String getField(

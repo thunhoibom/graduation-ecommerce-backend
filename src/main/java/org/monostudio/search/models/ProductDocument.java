@@ -10,6 +10,8 @@ import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 import org.springframework.data.elasticsearch.annotations.Setting;
 
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -37,7 +39,16 @@ public class ProductDocument {
     private String categoryName;
 
     @Field(type = FieldType.Keyword)
-    private java.util.List<String> categoryCodes;
+    private List<String> categoryCodes;
+
+    @Field(type = FieldType.Keyword)
+    private List<String> weatherTags;
+
+    @Field(type = FieldType.Integer)
+    private Integer tempMin;
+
+    @Field(type = FieldType.Integer)
+    private Integer tempMax;
 
     @Field(type = FieldType.Keyword)
     private String status;

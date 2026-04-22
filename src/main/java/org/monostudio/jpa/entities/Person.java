@@ -18,6 +18,8 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Size;
 
+import java.time.LocalDate;
+
 @Entity
 @Table(
     name = "persons",
@@ -61,6 +63,9 @@ public class Person
     @Builder.Default
     private String phone2 = "";
 
+    @Column(name = "person_birth_date")
+    private LocalDate birthDate;
+
     public Person(Person source) {
         this.id = source.id;
         this.firstName = source.firstName;
@@ -69,5 +74,6 @@ public class Person
         this.email = source.email;
         this.phone1 = source.phone1;
         this.phone2 = source.phone2;
+        this.birthDate = source.birthDate;
     }
 }

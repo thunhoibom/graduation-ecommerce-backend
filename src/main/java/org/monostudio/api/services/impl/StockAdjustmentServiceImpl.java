@@ -18,6 +18,7 @@ import org.monostudio.jpa.services.conversion.ProductVariantsConverterService;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
@@ -115,6 +116,18 @@ public class StockAdjustmentServiceImpl
 
     @Override
     @Transactional(readOnly = true)
+    public List<StockAdjustmentPojo> getBySku(String sku, int page, int size) {
+        if (sku == null || sku.isBlank()) {
+            return List.of();
+        }
+        return productVariantsRepository.findBySku(sku.trim())
+            .map(ProductVariant::getId)
+            .map(variantId -> getByVariant(variantId, page, size))
+            .orElse(List.of());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<StockAdjustmentPojo> getByOrder(Long orderId) {
         return stockAdjustmentsRepository.findByOrderId(orderId).stream()
             .map(a -> toPojo(a, a.getVariant()))
@@ -143,6 +156,88 @@ public class StockAdjustmentServiceImpl
         return stockAdjustmentsRepository.findAllDeep(PageRequest.of(page, size)).stream()
             .map(a -> toPojo(a, a.getVariant()))
             .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public StockAdjustmentPojo applyManualDelta(
+        Long variantId,
+        int quantityDelta,
+        StockAdjustment.StockAdjustmentReason reason,
+        String description,
+        Long orderId,
+        Long performedBy
+    ) {
+        ProductVariant variant = productVariantsRepository.findByIdWithLock(variantId)
+            .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
+                "Variant not found for stock adjustment: " + variantId));
+
+        int stockBefore = variant.getStockCurrent();
+        int stockAfter = stockBefore + quantityDelta;
+        if (stockAfter < 0) {
+            throw new IllegalArgumentException(
+                "Stock cannot go negative. variantId=" + variantId
+                    + ", current=" + stockBefore
+                    + ", delta=" + quantityDelta);
+        }
+
+        variant.setStockCurrent(stockAfter);
+        productVariantsRepository.save(variant);
+
+        StockAdjustment adjustment = StockAdjustment.builder()
+            .variant(variant)
+            .reason(reason != null ? reason : StockAdjustment.StockAdjustmentReason.MANUAL_ADJUSTMENT)
+            .quantityDelta(quantityDelta)
+            .stockBefore(stockBefore)
+            .stockAfter(stockAfter)
+            .description(description)
+            .orderId(orderId)
+            .performedBy(performedBy)
+            .build();
+
+        StockAdjustment saved = stockAdjustmentsRepository.saveAndFlush(adjustment);
+        logger.info("Manual stock adjustment applied: variant={}, delta={}, {} -> {}, reason={}",
+            variantId, quantityDelta, stockBefore, stockAfter, saved.getReason().name().toLowerCase(Locale.ROOT));
+        return toPojo(saved, variant);
+    }
+
+    @Override
+    @Transactional
+    public StockAdjustmentPojo applyManualTargetStock(
+        Long variantId,
+        int targetStock,
+        StockAdjustment.StockAdjustmentReason reason,
+        String description,
+        Long orderId,
+        Long performedBy
+    ) {
+        if (targetStock < 0) {
+            throw new IllegalArgumentException("targetStock cannot be negative");
+        }
+
+        ProductVariant variant = productVariantsRepository.findByIdWithLock(variantId)
+            .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
+                "Variant not found for stock adjustment: " + variantId));
+        int stockBefore = variant.getStockCurrent();
+        int delta = targetStock - stockBefore;
+
+        variant.setStockCurrent(targetStock);
+        productVariantsRepository.save(variant);
+
+        StockAdjustment adjustment = StockAdjustment.builder()
+            .variant(variant)
+            .reason(reason != null ? reason : StockAdjustment.StockAdjustmentReason.STOCK_RECOUNT)
+            .quantityDelta(delta)
+            .stockBefore(stockBefore)
+            .stockAfter(targetStock)
+            .description(description)
+            .orderId(orderId)
+            .performedBy(performedBy)
+            .build();
+        StockAdjustment saved = stockAdjustmentsRepository.saveAndFlush(adjustment);
+        logger.info("Manual target stock set: variant={}, delta={}, {} -> {}",
+            variantId, delta, stockBefore, targetStock);
+        return toPojo(saved, variant);
     }
 
     private StockAdjustmentPojo toPojo(StockAdjustment adjustment, ProductVariant variant) {

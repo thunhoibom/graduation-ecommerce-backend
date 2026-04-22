@@ -55,6 +55,15 @@ public interface AdminDashboardService {
      */
     Collection<LowStockAlertPojo> getLowStockAlerts();
 
+    /**
+     * Low-stock variants with a restock suggestion calculated from sales velocity.
+     *
+     * @param lookbackDays Number of recent days used to estimate sales velocity.
+     * @param leadTimeDays Number of forward days to cover until replenishment arrives.
+     * @return Restock suggestions for low-stock variants.
+     */
+    Collection<RestockSuggestionPojo> getLowStockRestockSuggestions(int lookbackDays, int leadTimeDays);
+
     // ─── Order Status Breakdown ────────────────────────────────────────────────
 
     /**
@@ -65,4 +74,11 @@ public interface AdminDashboardService {
      * @return Order counts per status.
      */
     Collection<OrderStatusCountPojo> getOrderStatusBreakdown(LocalDate from, LocalDate to);
+
+    /**
+     * Aggregated KPIs for inventory process queue/approval health.
+     *
+     * @return Inventory process metrics.
+     */
+    InventoryKpiPojo getInventoryKpis();
 }

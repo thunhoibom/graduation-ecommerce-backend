@@ -45,4 +45,14 @@ public interface VariantsBulkService {
      * Delete multiple variants at once.
      */
     BulkOperationResult bulkDelete(List<Long> ids);
+
+    /**
+     * Bulk update multiple variants with selected fields.
+     */
+    BulkOperationResult bulkUpdate(
+        List<Long> ids,
+        Integer priceModifier,
+        Integer currentStock,
+        Boolean active
+    );
 }

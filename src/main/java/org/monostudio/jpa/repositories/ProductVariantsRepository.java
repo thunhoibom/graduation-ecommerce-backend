@@ -38,6 +38,21 @@ public interface ProductVariantsRepository
     @Query("SELECT v FROM ProductVariant v WHERE v.product.id IN :productIds")
     List<ProductVariant> findByProductIds(@Param("productIds") Collection<Long> productIds);
 
+    @Query("""
+        SELECT CASE WHEN COUNT(v) > 0 THEN true ELSE false END
+        FROM ProductVariant v
+        WHERE v.product.id = :productId
+          AND LOWER(TRIM(v.size)) = LOWER(TRIM(:size))
+          AND LOWER(TRIM(COALESCE(v.color, ''))) = LOWER(TRIM(COALESCE(:color, '')))
+          AND (:excludeId IS NULL OR v.id <> :excludeId)
+        """)
+    boolean existsDuplicateCombination(
+        @Param("productId") Long productId,
+        @Param("size") String size,
+        @Param("color") String color,
+        @Param("excludeId") Long excludeId
+    );
+
     @Modifying
     @Transactional
     @Query("UPDATE ProductVariant v SET v.stockCurrent = :stock WHERE v.id = :id")

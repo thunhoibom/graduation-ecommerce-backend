@@ -46,6 +46,9 @@ public class CartSessionPojo {
     /** Final total after discount */
     private Integer totalAfterDiscount;
 
+    /** JSON array of applied promotions (from server pricing engine) */
+    private String appliedPromotionsJson;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

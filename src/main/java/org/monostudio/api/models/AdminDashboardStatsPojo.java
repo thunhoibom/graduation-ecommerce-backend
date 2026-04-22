@@ -32,4 +32,6 @@ public class AdminDashboardStatsPojo {
     private Collection<TopProductPojo> topProducts;
     /** Variants currently at or below their critical stock threshold. */
     private Collection<LowStockAlertPojo> lowStockAlerts;
+    /** High-level inventory process KPIs for admin operations. */
+    private InventoryKpiPojo inventoryKpis;
 }

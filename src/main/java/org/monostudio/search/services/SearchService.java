@@ -5,6 +5,8 @@ import co.elastic.clients.elasticsearch._types.query_dsl.QueryBuilders;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.monostudio.api.models.DataPagePojo;
+import org.monostudio.api.models.WeatherCategoryRecommendationPojo;
+import org.monostudio.api.models.WeatherContextPojo;
 import org.monostudio.search.models.ProductDocument;
 import org.monostudio.search.repositories.ProductSearchRepository;
 import org.springframework.data.domain.PageRequest;
@@ -17,6 +19,8 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.query.Query;
 import org.springframework.stereotype.Service;
 
+import co.elastic.clients.json.JsonData;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -27,6 +31,7 @@ public class SearchService {
 
     private final ProductSearchRepository productSearchRepository;
     private final ElasticsearchOperations elasticsearchOperations;
+    private final WeatherContextService weatherContextService;
 
     public DataPagePojo<ProductDocument> searchProducts(
             String keyword,
@@ -95,5 +100,51 @@ public class SearchService {
 
     public List<ProductDocument> searchProductsSimple(String keyword) {
         return productSearchRepository.findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(keyword, keyword);
+    }
+
+    public WeatherCategoryRecommendationPojo recommendByWeatherAndCategory(
+            String categoryCode,
+            Double latitude,
+            Double longitude,
+            int limit
+    ) {
+        WeatherContextPojo weatherContext = weatherContextService.resolve(latitude, longitude);
+        int targetTemp = weatherContext.getTemperature() != null
+                ? (int) Math.round(weatherContext.getTemperature())
+                : 25;
+
+        Pageable pageable = PageRequest.of(0, Math.max(1, limit));
+        Query query = NativeQuery.builder()
+                .withPageable(pageable)
+                .withQuery(q -> q.bool(b -> b
+                        .filter(f -> f.term(t -> t.field("status").value("PUBLISHED")))
+                        .filter(f -> f.term(t -> t.field("categoryCodes").value(categoryCode)))
+                        .should(s -> s.term(t -> t
+                                .field("weatherTags")
+                                .value(weatherContext.getWeatherTag())
+                                .boost(2.0f)))
+                        .should(s -> s.bool(tempBoost -> tempBoost
+                                .must(m1 -> m1.range(r -> r
+                                        .field("tempMin")
+                                        .lte(JsonData.of(targetTemp))))
+                                .must(m2 -> m2.range(r -> r
+                                        .field("tempMax")
+                                        .gte(JsonData.of(targetTemp))))
+                                .boost(1.5f)))
+                        .minimumShouldMatch("0")
+                ))
+                .build();
+
+        SearchHits<ProductDocument> searchHits = elasticsearchOperations.search(query, ProductDocument.class);
+        List<ProductDocument> items = searchHits.getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        return WeatherCategoryRecommendationPojo.builder()
+                .sectionTitle("Goi y theo thoi tiet cho danh muc")
+                .category(categoryCode)
+                .weatherContext(weatherContext)
+                .items(items)
+                .build();
     }
 }

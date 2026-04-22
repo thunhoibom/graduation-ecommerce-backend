@@ -160,6 +160,28 @@ public interface OrdersRepository
         @Param("limit") int limit);
 
     /**
+     * Units sold by product variant in a date range for fulfilled/paid orders.
+     */
+    @Query(value = """
+        SELECT od.product_variant_id                    AS variantId,
+               COALESCE(SUM(od.order_detail_units), 0) AS unitsSold
+        FROM   order_details od
+        JOIN   orders o ON od.order_id = o.order_id
+        WHERE  od.product_variant_id IS NOT NULL
+          AND  o.order_date >= :from
+          AND  o.order_date <= :to
+          AND  o.order_status_id IN (
+                   SELECT os.order_status_id
+                   FROM   order_statuses os
+                   WHERE  os.order_status_name IN ('Paid, Confirmed', 'Delivery Complete')
+               )
+        GROUP  BY od.product_variant_id
+        """, nativeQuery = true)
+    List<VariantSalesProjection> findVariantUnitsSold(
+        @Param("from") Instant from,
+        @Param("to") Instant to);
+
+    /**
      * Check whether a customer has at least one completed (paid/confirmed) order containing a specific product.
      * Used to determine verified purchase status for product reviews.
      */

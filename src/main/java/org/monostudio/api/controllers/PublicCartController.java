@@ -14,7 +14,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.monostudio.api.models.CartItemPojo;
+import org.monostudio.api.models.CartPricingResult;
 import org.monostudio.api.models.CartSessionPojo;
+import org.monostudio.api.services.CartPricingService;
 import org.monostudio.api.services.CartService;
 import org.monostudio.common.exceptions.BadInputException;
 
@@ -27,10 +29,12 @@ import java.util.Map;
 public class PublicCartController {
 
     private final CartService cartService;
+    private final CartPricingService cartPricingService;
 
     @Autowired
-    public PublicCartController(CartService cartService) {
+    public PublicCartController(CartService cartService, CartPricingService cartPricingService) {
         this.cartService = cartService;
+        this.cartPricingService = cartPricingService;
     }
 
     /**
@@ -43,6 +47,24 @@ public class PublicCartController {
         @RequestHeader(name = "X-Session-Token", required = false) String sessionToken
     ) {
         return cartService.getCart(sessionToken);
+    }
+
+    /**
+     * POST /public/cart/calculate
+     * Runs promotion rule engine and optional coupon; persists snapshot on the cart session.
+     * Body (optional): {@code { "couponCode": "SUMMER20" }}
+     */
+    @PostMapping("/calculate")
+    @Operation(summary = "Calculate cart pricing (rules + coupon) and persist snapshot")
+    public CartPricingResult calculateCart(
+        @RequestHeader(name = "X-Session-Token", required = false) String sessionToken,
+        @RequestBody(required = false) Map<String, Object> body
+    ) throws BadInputException {
+        String coupon = null;
+        if (body != null && body.get("couponCode") != null) {
+            coupon = String.valueOf(body.get("couponCode"));
+        }
+        return cartPricingService.calculate(sessionToken, coupon, true);
     }
 
     /**

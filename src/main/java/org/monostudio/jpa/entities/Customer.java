@@ -39,6 +39,13 @@ public class Customer
     @OneToOne(optional = false, cascade = CascadeType.ALL)
     private Person person;
 
+    @Column(name = "customer_loyalty_tier", length = 32)
+    private String loyaltyTier;
+
+    @Column(name = "customer_monthly_spend_cents", nullable = false, columnDefinition = "integer default 0")
+    @Builder.Default
+    private int monthlySpendCents = 0;
+
     /**
      * Please note: this copy-constructor DOES include a Customer's relationship to its own profile data
      *
@@ -47,5 +54,7 @@ public class Customer
     public Customer(Customer source) {
         this.id = source.id;
         this.person = new Person(source.person);
+        this.loyaltyTier = source.loyaltyTier;
+        this.monthlySpendCents = source.monthlySpendCents;
     }
 }

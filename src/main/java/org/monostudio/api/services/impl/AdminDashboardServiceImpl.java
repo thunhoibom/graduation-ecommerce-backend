@@ -5,12 +5,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.*;
 import org.monostudio.api.services.AdminDashboardService;
+import org.monostudio.jpa.entities.PurchaseOrder.PurchaseOrderStatus;
 import org.monostudio.jpa.entities.ProductVariant;
+import org.monostudio.jpa.entities.StockCountSession.StockCountStatus;
+import org.monostudio.jpa.entities.StockTransfer.StockTransferStatus;
 import org.monostudio.jpa.repositories.*;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -25,14 +29,23 @@ public class AdminDashboardServiceImpl
 
     private final OrdersRepository ordersRepository;
     private final ProductVariantsRepository productVariantsRepository;
+    private final PurchaseOrdersRepository purchaseOrdersRepository;
+    private final StockTransfersRepository stockTransfersRepository;
+    private final StockCountSessionsRepository stockCountSessionsRepository;
 
     @Autowired
     public AdminDashboardServiceImpl(
         OrdersRepository ordersRepository,
-        ProductVariantsRepository productVariantsRepository
+        ProductVariantsRepository productVariantsRepository,
+        PurchaseOrdersRepository purchaseOrdersRepository,
+        StockTransfersRepository stockTransfersRepository,
+        StockCountSessionsRepository stockCountSessionsRepository
     ) {
         this.ordersRepository = ordersRepository;
         this.productVariantsRepository = productVariantsRepository;
+        this.purchaseOrdersRepository = purchaseOrdersRepository;
+        this.stockTransfersRepository = stockTransfersRepository;
+        this.stockCountSessionsRepository = stockCountSessionsRepository;
     }
 
     // ─── Full Dashboard ─────────────────────────────────────────────────────────
@@ -55,6 +68,7 @@ public class AdminDashboardServiceImpl
         Collection<TopProductPojo> topProducts = getTopProducts(from, to, 10);
         Collection<OrderStatusCountPojo> statusBreakdown = getOrderStatusBreakdown(from, to);
         Collection<LowStockAlertPojo> lowStockAlerts = getLowStockAlerts();
+        InventoryKpiPojo inventoryKpis = getInventoryKpis();
 
         return AdminDashboardStatsPojo.builder()
             .totalRevenue(totalRevenue)
@@ -63,6 +77,7 @@ public class AdminDashboardServiceImpl
             .topProducts(topProducts)
             .orderStatusBreakdown(statusBreakdown)
             .lowStockAlerts(lowStockAlerts)
+            .inventoryKpis(inventoryKpis)
             .build();
     }
 
@@ -117,6 +132,27 @@ public class AdminDashboardServiceImpl
             .collect(Collectors.toList());
     }
 
+    @Override
+    public Collection<RestockSuggestionPojo> getLowStockRestockSuggestions(int lookbackDays, int leadTimeDays) {
+        int safeLookbackDays = Math.max(1, lookbackDays);
+        int safeLeadTimeDays = Math.max(1, leadTimeDays);
+        Instant to = Instant.now();
+        Instant from = to.minus(safeLookbackDays, ChronoUnit.DAYS);
+
+        Map<Long, Long> soldByVariant = ordersRepository.findVariantUnitsSold(from, to)
+            .stream()
+            .collect(Collectors.toMap(
+                VariantSalesProjection::getVariantId,
+                VariantSalesProjection::getUnitsSold,
+                Long::sum
+            ));
+
+        return productVariantsRepository.findLowStockAlerts()
+            .stream()
+            .map(v -> toRestockSuggestion(v, safeLookbackDays, safeLeadTimeDays, soldByVariant.getOrDefault(v.getId(), 0L)))
+            .collect(Collectors.toList());
+    }
+
     // ─── Order Status Breakdown ─────────────────────────────────────────────────
 
     @Override
@@ -131,6 +167,25 @@ public class AdminDashboardServiceImpl
                 .count(r.getCount())
                 .build())
             .collect(Collectors.toList());
+    }
+
+    @Override
+    public InventoryKpiPojo getInventoryKpis() {
+        long openPurchaseOrders = purchaseOrdersRepository.countByStatusIn(List.of(
+            PurchaseOrderStatus.SUBMITTED,
+            PurchaseOrderStatus.APPROVED,
+            PurchaseOrderStatus.PARTIALLY_RECEIVED
+        ));
+        long pendingTransferApprovals = stockTransfersRepository.countByStatus(StockTransferStatus.SUBMITTED);
+        long pendingStockCountApprovals = stockCountSessionsRepository.countByStatus(StockCountStatus.COUNTED);
+        long approvedStockCountsToPost = stockCountSessionsRepository.countByStatus(StockCountStatus.APPROVED);
+
+        return InventoryKpiPojo.builder()
+            .openPurchaseOrders(openPurchaseOrders)
+            .pendingTransferApprovals(pendingTransferApprovals)
+            .pendingStockCountApprovals(pendingStockCountApprovals)
+            .approvedStockCountsToPost(approvedStockCountsToPost)
+            .build();
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -168,6 +223,36 @@ public class AdminDashboardServiceImpl
             .color(variant.getColor())
             .currentStock(variant.getStockCurrent())
             .criticalStock(variant.getStockCritical())
+            .build();
+    }
+
+    private RestockSuggestionPojo toRestockSuggestion(
+        ProductVariant variant,
+        int lookbackDays,
+        int leadTimeDays,
+        long soldInLookback
+    ) {
+        double avgDailySold = soldInLookback / (double) lookbackDays;
+        int projectedDemand = (int) Math.ceil(avgDailySold * leadTimeDays);
+        int safetyStock = Math.max(variant.getStockCritical(), (int) Math.ceil(avgDailySold * 7));
+        int recommendedRestockQty = Math.max(0, projectedDemand + safetyStock - variant.getStockCurrent());
+
+        String productName = (variant.getProduct() != null) ? variant.getProduct().getName() : null;
+        return RestockSuggestionPojo.builder()
+            .variantId(variant.getId())
+            .sku(variant.getSku())
+            .productName(productName)
+            .size(variant.getSize())
+            .color(variant.getColor())
+            .currentStock(variant.getStockCurrent())
+            .criticalStock(variant.getStockCritical())
+            .lookbackDays(lookbackDays)
+            .leadTimeDays(leadTimeDays)
+            .soldInLookback(soldInLookback)
+            .avgDailySold(avgDailySold)
+            .projectedDemand(projectedDemand)
+            .safetyStock(safetyStock)
+            .recommendedRestockQty(recommendedRestockQty)
             .build();
     }
 }

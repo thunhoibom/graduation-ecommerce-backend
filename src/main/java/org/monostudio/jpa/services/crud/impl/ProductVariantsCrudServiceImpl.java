@@ -33,6 +33,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.commons.lang3.StringUtils;
 
 @Transactional
 @Service
@@ -67,6 +68,7 @@ public class ProductVariantsCrudServiceImpl
     public ProductVariantPojo create(ProductVariantPojo input) throws BadInputException, EntityExistsException {
         this.validateInputPojoBeforeCreation(input);
         ProductVariant prepared = productVariantsConverterService.convertToNewEntity(input);
+        validateUniqueCombination(prepared, null);
         ProductVariant persistent = productVariantsRepository.saveAndFlush(prepared);
         ProductVariantPojo target = productVariantsConverterService.convertToPojo(persistent);
 
@@ -88,6 +90,7 @@ public class ProductVariantsCrudServiceImpl
         throws EntityNotFoundException, BadInputException {
         ProductVariant prepared = productVariantsConverterService.convertToNewEntity(input);
         prepared.setId(id);
+        validateUniqueCombination(prepared, id);
         ProductVariant persistent = productVariantsRepository.saveAndFlush(prepared);
         ProductVariantPojo target = productVariantsConverterService.convertToPojo(persistent);
 
@@ -210,5 +213,31 @@ public class ProductVariantsCrudServiceImpl
             }
         }
         return allRelationships;
+    }
+
+    private void validateUniqueCombination(ProductVariant variant, Long excludeId) throws BadInputException {
+        if (variant.getProduct() == null || variant.getProduct().getId() == null) {
+            throw new BadInputException("Product is required for variant");
+        }
+        if (StringUtils.isBlank(variant.getSize())) {
+            throw new BadInputException("Size is required for variant");
+        }
+        String normalizedColor = StringUtils.trimToEmpty(variant.getColor());
+
+        boolean duplicated = productVariantsRepository.existsDuplicateCombination(
+            variant.getProduct().getId(),
+            variant.getSize(),
+            normalizedColor,
+            excludeId
+        );
+        if (duplicated) {
+            String colorLabel = normalizedColor.isEmpty() ? "N/A" : normalizedColor;
+            throw new BadInputException(
+                "Duplicate variant combination for this product: size="
+                    + variant.getSize()
+                    + ", color="
+                    + colorLabel
+            );
+        }
     }
 }

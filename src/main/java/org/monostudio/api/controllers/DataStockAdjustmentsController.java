@@ -100,6 +100,17 @@ public class DataStockAdjustmentsController
         return stockAdjustmentService.getByVariant(variantId, page, size);
     }
 
+    @GetMapping("/timeline/sku/{sku}")
+    @Operation(summary = "Get stock timeline by variant SKU.")
+    @PreAuthorize("hasAuthority('stockAdjustments:read')")
+    public List<StockAdjustmentPojo> getTimelineBySku(
+        @PathVariable String sku,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "100") int size
+    ) {
+        return stockAdjustmentService.getBySku(sku, page, size);
+    }
+
     @GetMapping("/orders/{orderId}")
     @Operation(summary = "Get all stock adjustments for a specific order.")
     @PreAuthorize("hasAuthority('stockAdjustments:read')")
@@ -116,22 +127,77 @@ public class DataStockAdjustmentsController
         if (request.getVariantId() == null) {
             throw new BadInputException("variantId is required");
         }
-        if (request.getQuantityDelta() == 0) {
-            throw new BadInputException("quantityDelta cannot be zero");
+        if (request.getReason() == null || request.getReason().isBlank()) {
+            throw new BadInputException("reason is required");
         }
 
-        StockAdjustment.StockAdjustmentReason reason = StockAdjustment.StockAdjustmentReason.MANUAL_ADJUSTMENT;
+        StockAdjustmentRequest.AdjustmentType type = request.getType() != null
+            ? request.getType()
+            : StockAdjustmentRequest.AdjustmentType.ADJUSTMENT;
 
-        return stockAdjustmentService.recordFull(
-            request.getVariantId(),
-            reason,
-            request.getQuantityDelta(),
-            request.getDescription(),
-            null,  // sessionId
-            request.getOrderId(),
-            null,  // returnRequestId
-            request.getPerformedBy()
-        );
+        String description = "[" + type.name() + "] " + request.getReason().trim();
+        if (request.getDescription() != null && !request.getDescription().isBlank()) {
+            description += " - " + request.getDescription().trim();
+        }
+
+        try {
+            if (request.getType() == null && request.getQuantityDelta() != null) {
+                if (request.getQuantityDelta() == 0) {
+                    throw new BadInputException("quantityDelta cannot be zero");
+                }
+                return stockAdjustmentService.applyManualDelta(
+                    request.getVariantId(),
+                    request.getQuantityDelta(),
+                    StockAdjustment.StockAdjustmentReason.MANUAL_ADJUSTMENT,
+                    "[LEGACY_DELTA] " + request.getReason().trim(),
+                    request.getOrderId(),
+                    request.getPerformedBy()
+                );
+            }
+            return switch (type) {
+                case INBOUND -> {
+                    if (request.getQuantity() == null || request.getQuantity() <= 0) {
+                        throw new BadInputException("quantity must be > 0 for INBOUND");
+                    }
+                    yield stockAdjustmentService.applyManualDelta(
+                        request.getVariantId(),
+                        request.getQuantity(),
+                        StockAdjustment.StockAdjustmentReason.MANUAL_ADJUSTMENT,
+                        description,
+                        request.getOrderId(),
+                        request.getPerformedBy()
+                    );
+                }
+                case OUTBOUND -> {
+                    if (request.getQuantity() == null || request.getQuantity() <= 0) {
+                        throw new BadInputException("quantity must be > 0 for OUTBOUND");
+                    }
+                    yield stockAdjustmentService.applyManualDelta(
+                        request.getVariantId(),
+                        -request.getQuantity(),
+                        StockAdjustment.StockAdjustmentReason.MANUAL_ADJUSTMENT,
+                        description,
+                        request.getOrderId(),
+                        request.getPerformedBy()
+                    );
+                }
+                case ADJUSTMENT -> {
+                    if (request.getTargetStock() == null || request.getTargetStock() < 0) {
+                        throw new BadInputException("targetStock must be >= 0 for ADJUSTMENT");
+                    }
+                    yield stockAdjustmentService.applyManualTargetStock(
+                        request.getVariantId(),
+                        request.getTargetStock(),
+                        StockAdjustment.StockAdjustmentReason.STOCK_RECOUNT,
+                        description,
+                        request.getOrderId(),
+                        request.getPerformedBy()
+                    );
+                }
+            };
+        } catch (IllegalArgumentException ex) {
+            throw new BadInputException(ex.getMessage());
+        }
     }
 
     @Override
@@ -143,16 +209,34 @@ public class DataStockAdjustmentsController
     // ─── Request body for manual adjustment ──────────────────────────
 
     public static class StockAdjustmentRequest {
+        public enum AdjustmentType {
+            INBOUND,
+            OUTBOUND,
+            ADJUSTMENT
+        }
+
         private Long variantId;
-        private int quantityDelta;
+        private Integer quantity;
+        private Integer quantityDelta;
+        private Integer targetStock;
+        private AdjustmentType type;
+        private String reason;
         private String description;
         private Long orderId;
         private Long performedBy;
 
         public Long getVariantId() { return variantId; }
         public void setVariantId(Long variantId) { this.variantId = variantId; }
-        public int getQuantityDelta() { return quantityDelta; }
-        public void setQuantityDelta(int quantityDelta) { this.quantityDelta = quantityDelta; }
+        public Integer getQuantity() { return quantity; }
+        public void setQuantity(Integer quantity) { this.quantity = quantity; }
+        public Integer getQuantityDelta() { return quantityDelta; }
+        public void setQuantityDelta(Integer quantityDelta) { this.quantityDelta = quantityDelta; }
+        public Integer getTargetStock() { return targetStock; }
+        public void setTargetStock(Integer targetStock) { this.targetStock = targetStock; }
+        public AdjustmentType getType() { return type; }
+        public void setType(AdjustmentType type) { this.type = type; }
+        public String getReason() { return reason; }
+        public void setReason(String reason) { this.reason = reason; }
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
         public Long getOrderId() { return orderId; }

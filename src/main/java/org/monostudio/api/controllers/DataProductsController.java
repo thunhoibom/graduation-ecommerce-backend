@@ -15,9 +15,11 @@ import org.monostudio.api.models.ProductCsvImportResult;
 import org.monostudio.api.models.ProductPojo;
 import org.monostudio.api.services.BulkOperationsService;
 import org.monostudio.api.services.PaginationService;
+import org.monostudio.api.services.ProductAuditLogService;
 import org.monostudio.api.services.ProductsBulkService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Product;
+import org.monostudio.jpa.entities.ProductAuditLog;
 import org.monostudio.jpa.entities.ProductStatus;
 import org.monostudio.jpa.repositories.ProductsRepository;
 import org.monostudio.jpa.services.SortSpecParserService;
@@ -31,8 +33,11 @@ import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import java.io.IOException;
+import java.security.Principal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
@@ -47,6 +52,7 @@ public class DataProductsController
     private final ProductsBulkService productsBulkService;
     private final BulkOperationsService bulkOperationsService;
     private final IndexEventProducer indexEventProducer;
+    private final ProductAuditLogService productAuditLogService;
 
     @Autowired
     public DataProductsController(
@@ -57,13 +63,15 @@ public class DataProductsController
         ProductsRepository productsRepository,
         ProductsBulkService productsBulkService,
         BulkOperationsService bulkOperationsService,
-        IndexEventProducer indexEventProducer
+        IndexEventProducer indexEventProducer,
+        ProductAuditLogService productAuditLogService
     ) {
         super(paginationService, sortService, crudService, predicateService);
         this.productsRepository = productsRepository;
         this.productsBulkService = productsBulkService;
         this.bulkOperationsService = bulkOperationsService;
         this.indexEventProducer = indexEventProducer;
+        this.productAuditLogService = productAuditLogService;
     }
 
     @Override
@@ -73,7 +81,6 @@ public class DataProductsController
         return super.readMany(allRequestParams);
     }
 
-    @Override
     @PostMapping
     @Operation(summary = "Define new products.")
     @ResponseStatus(CREATED)
@@ -89,9 +96,16 @@ public class DataProductsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
     })
-    public void create(@RequestBody ProductPojo input)
+    public void create(@RequestBody ProductPojo input, Principal principal)
         throws BadInputException, EntityExistsException {
-        crudService.create(input);
+        ProductPojo created = crudService.create(input);
+        auditProductChange("PRODUCT_CREATE", null, created, principal, null);
+    }
+
+    @Override
+    public void create(@Valid ProductPojo input)
+        throws BadInputException, EntityExistsException {
+        create(input, null);
     }
 
     @PutMapping("/{id}")
@@ -109,9 +123,12 @@ public class DataProductsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
     })
-    public void update(@RequestBody ProductPojo input, @PathVariable Long id)
+    public void update(@RequestBody ProductPojo input, @PathVariable Long id, Principal principal)
         throws BadInputException, EntityNotFoundException {
-        crudService.update(input, id);
+        ProductPojo before = safeFindById(id);
+        ProductPojo after = crudService.update(input, id)
+            .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
+        auditProductChange("PRODUCT_UPDATE", before, after, principal, null);
     }
 
     @PatchMapping("/{id}")
@@ -131,10 +148,14 @@ public class DataProductsController
     })
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
-        @PathVariable Long id
+        @PathVariable Long id,
+        Principal principal
     ) throws BadInputException, EntityNotFoundException {
+        ProductPojo before = safeFindById(id);
         crudService.partialUpdate(input, id)
             .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
+        ProductPojo after = safeFindById(id);
+        auditProductChange("PRODUCT_PATCH", before, after, principal, null);
     }
 
     @DeleteMapping("/{id}")
@@ -152,9 +173,11 @@ public class DataProductsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
     })
-    public void delete(@PathVariable Long id)
+    public void delete(@PathVariable Long id, Principal principal)
         throws EntityNotFoundException {
+        ProductPojo before = safeFindById(id);
         crudService.delete(id);
+        auditProductChange("PRODUCT_DELETE", before, null, principal, null);
     }
 
     @Override
@@ -182,14 +205,17 @@ public class DataProductsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
     })
-    public ProductPojo publishProduct(@PathVariable Long id)
+    public ProductPojo publishProduct(@PathVariable Long id, Principal principal)
         throws EntityNotFoundException {
+        ProductPojo before = safeFindById(id);
         Product product = productsRepository.findById(id)
             .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
         product.setStatus(ProductStatus.PUBLISHED);
         productsRepository.saveAndFlush(product);
         indexEventProducer.sendIndexEvent("PRODUCT", id, "UPDATE");
-        return crudService.findById(id);
+        ProductPojo after = crudService.findById(id);
+        auditProductChange("PRODUCT_PUBLISH", before, after, principal, null);
+        return after;
     }
 
     /**
@@ -213,14 +239,17 @@ public class DataProductsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
     })
-    public ProductPojo unpublishProduct(@PathVariable Long id)
+    public ProductPojo unpublishProduct(@PathVariable Long id, Principal principal)
         throws EntityNotFoundException {
+        ProductPojo before = safeFindById(id);
         Product product = productsRepository.findById(id)
             .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
         product.setStatus(ProductStatus.UNLISTED);
         productsRepository.saveAndFlush(product);
         indexEventProducer.sendIndexEvent("PRODUCT", id, "UPDATE");
-        return crudService.findById(id);
+        ProductPojo after = crudService.findById(id);
+        auditProductChange("PRODUCT_UNPUBLISH", before, after, principal, null);
+        return after;
     }
 
     /**
@@ -243,14 +272,17 @@ public class DataProductsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
     })
-    public ProductPojo revertToDraft(@PathVariable Long id)
+    public ProductPojo revertToDraft(@PathVariable Long id, Principal principal)
         throws EntityNotFoundException {
+        ProductPojo before = safeFindById(id);
         Product product = productsRepository.findById(id)
             .orElseThrow(() -> new EntityNotFoundException("Product not found: " + id));
         product.setStatus(ProductStatus.DRAFT);
         productsRepository.saveAndFlush(product);
         indexEventProducer.sendIndexEvent("PRODUCT", id, "UPDATE");
-        return crudService.findById(id);
+        ProductPojo after = crudService.findById(id);
+        auditProductChange("PRODUCT_REVERT_TO_DRAFT", before, after, principal, null);
+        return after;
     }
 
     // ─── Bulk Operations ────────────────────────────────────────────────────────
@@ -292,9 +324,19 @@ public class DataProductsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
     })
-    public BulkOperationResult bulkPublish(@RequestBody List<Long> ids)
+    public BulkOperationResult bulkPublish(@RequestBody List<Long> ids, Principal principal)
         throws BadInputException {
-        return bulkOperationsService.bulkPublish(ids);
+        String correlationId = "products-bulk-publish-" + UUID.randomUUID();
+        Map<Long, ProductPojo> before = snapshotProducts(ids);
+        BulkOperationResult result = bulkOperationsService.bulkPublish(ids);
+        for (Long id : ids) {
+            ProductPojo beforeItem = before.get(id);
+            ProductPojo afterItem = safeFindByIdOrNull(id);
+            if (beforeItem != null || afterItem != null) {
+                auditProductChange("PRODUCT_BULK_PUBLISH", beforeItem, afterItem, principal, correlationId);
+            }
+        }
+        return result;
     }
 
     /**
@@ -317,9 +359,19 @@ public class DataProductsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
     })
-    public BulkOperationResult bulkUnpublish(@RequestBody List<Long> ids)
+    public BulkOperationResult bulkUnpublish(@RequestBody List<Long> ids, Principal principal)
         throws BadInputException {
-        return bulkOperationsService.bulkUnpublish(ids);
+        String correlationId = "products-bulk-unpublish-" + UUID.randomUUID();
+        Map<Long, ProductPojo> before = snapshotProducts(ids);
+        BulkOperationResult result = bulkOperationsService.bulkUnpublish(ids);
+        for (Long id : ids) {
+            ProductPojo beforeItem = before.get(id);
+            ProductPojo afterItem = safeFindByIdOrNull(id);
+            if (beforeItem != null || afterItem != null) {
+                auditProductChange("PRODUCT_BULK_UNPUBLISH", beforeItem, afterItem, principal, correlationId);
+            }
+        }
+        return result;
     }
 
     /**
@@ -342,9 +394,18 @@ public class DataProductsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
     })
-    public BulkOperationResult bulkDelete(@RequestBody List<Long> ids)
+    public BulkOperationResult bulkDelete(@RequestBody List<Long> ids, Principal principal)
         throws BadInputException {
-        return bulkOperationsService.bulkDelete(ids);
+        String correlationId = "products-bulk-delete-" + UUID.randomUUID();
+        Map<Long, ProductPojo> before = snapshotProducts(ids);
+        BulkOperationResult result = bulkOperationsService.bulkDelete(ids);
+        for (Long id : ids) {
+            ProductPojo beforeItem = before.get(id);
+            if (beforeItem != null) {
+                auditProductChange("PRODUCT_BULK_DELETE", beforeItem, null, principal, correlationId);
+            }
+        }
+        return result;
     }
 
     /**
@@ -369,8 +430,81 @@ public class DataProductsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
     })
     public ProductCsvImportResult importProducts(
-        @RequestPart("file") org.springframework.web.multipart.MultipartFile file
+        @RequestPart("file") org.springframework.web.multipart.MultipartFile file,
+        Principal principal
     ) throws IOException {
-        return productsBulkService.importProducts(file);
+        ProductCsvImportResult result = productsBulkService.importProducts(file);
+        productAuditLogService.recordBestEffort(new ProductAuditLogService.AuditEvent(
+            "PRODUCT_IMPORT",
+            ProductAuditLog.EntityType.PRODUCT,
+            0L,
+            null,
+            null,
+            null,
+            null,
+            result,
+            "Imported products from CSV",
+            actor(principal),
+            "ADMIN_API",
+            "products-import-" + UUID.randomUUID()
+        ));
+        return result;
+    }
+
+    private Map<Long, ProductPojo> snapshotProducts(List<Long> ids) {
+        Map<Long, ProductPojo> snapshots = new HashMap<>();
+        if (ids == null) {
+            return snapshots;
+        }
+        for (Long id : ids) {
+            ProductPojo found = safeFindByIdOrNull(id);
+            if (found != null) {
+                snapshots.put(id, found);
+            }
+        }
+        return snapshots;
+    }
+
+    private ProductPojo safeFindById(Long id) {
+        return crudService.findById(id);
+    }
+
+    private ProductPojo safeFindByIdOrNull(Long id) {
+        try {
+            return safeFindById(id);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void auditProductChange(
+        String action,
+        ProductPojo before,
+        ProductPojo after,
+        Principal principal,
+        String correlationId
+    ) {
+        ProductPojo anchor = after != null ? after : before;
+        if (anchor == null || anchor.getId() == null) {
+            return;
+        }
+        productAuditLogService.recordBestEffort(new ProductAuditLogService.AuditEvent(
+            action,
+            ProductAuditLog.EntityType.PRODUCT,
+            anchor.getId(),
+            anchor.getId(),
+            null,
+            anchor.getBarcode(),
+            before,
+            after,
+            "Product change: " + action,
+            actor(principal),
+            "ADMIN_API",
+            correlationId
+        ));
+    }
+
+    private String actor(Principal principal) {
+        return principal != null ? principal.getName() : "system";
     }
 }

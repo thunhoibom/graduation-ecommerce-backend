@@ -13,10 +13,14 @@ import org.monostudio.api.models.BulkOperationResult;
 import org.monostudio.api.models.DataPagePojo;
 import org.monostudio.api.models.ProductCsvImportResult;
 import org.monostudio.api.models.ProductVariantPojo;
+import org.monostudio.api.models.VariantBulkUpdateRequest;
 import org.monostudio.api.services.PaginationService;
+import org.monostudio.api.services.ProductAuditLogService;
 import org.monostudio.api.services.VariantsBulkService;
 import org.monostudio.common.exceptions.BadInputException;
+import org.monostudio.jpa.entities.ProductAuditLog;
 import org.monostudio.jpa.entities.ProductVariant;
+import org.monostudio.jpa.repositories.ProductsRepository;
 import org.monostudio.jpa.services.SortSpecParserService;
 import org.monostudio.jpa.services.crud.ProductVariantsCrudService;
 import org.monostudio.jpa.services.predicates.ProductVariantsPredicateService;
@@ -27,8 +31,11 @@ import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import java.io.IOException;
+import java.security.Principal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
@@ -40,6 +47,8 @@ public class DataProductVariantsController
     extends DataCrudGenericController<ProductVariantPojo, ProductVariant> {
 
     private final VariantsBulkService variantsBulkService;
+    private final ProductAuditLogService productAuditLogService;
+    private final ProductsRepository productsRepository;
 
     @Autowired
     public DataProductVariantsController(
@@ -47,10 +56,14 @@ public class DataProductVariantsController
         SortSpecParserService sortService,
         ProductVariantsCrudService crudService,
         ProductVariantsPredicateService predicateService,
-        VariantsBulkService variantsBulkService
+        VariantsBulkService variantsBulkService,
+        ProductAuditLogService productAuditLogService,
+        ProductsRepository productsRepository
     ) {
         super(paginationService, sortService, crudService, predicateService);
         this.variantsBulkService = variantsBulkService;
+        this.productAuditLogService = productAuditLogService;
+        this.productsRepository = productsRepository;
     }
 
     @Override
@@ -60,7 +73,6 @@ public class DataProductVariantsController
         return super.readMany(allRequestParams);
     }
 
-    @Override
     @PostMapping
     @Operation(summary = "Define a new product variant.")
     @ResponseStatus(CREATED)
@@ -72,10 +84,17 @@ public class DataProductVariantsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
     })
 
-    public void create(@RequestBody @Valid ProductVariantPojo input)
+    public void create(@RequestBody @Valid ProductVariantPojo input, Principal principal)
 
         throws BadInputException, EntityExistsException {
-        crudService.create(input);
+        ProductVariantPojo created = crudService.create(input);
+        auditVariantChange("VARIANT_CREATE", null, created, principal, null);
+    }
+
+    @Override
+    public void create(@Valid ProductVariantPojo input)
+        throws BadInputException, EntityExistsException {
+        create(input, null);
     }
 
     @PutMapping("/{id}")
@@ -89,10 +108,13 @@ public class DataProductVariantsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
     })
 
-    public void update(@RequestBody @Valid ProductVariantPojo input, @PathVariable Long id)
+    public void update(@RequestBody @Valid ProductVariantPojo input, @PathVariable Long id, Principal principal)
 
         throws BadInputException, EntityNotFoundException {
-        crudService.update(input, id);
+        ProductVariantPojo before = safeFindById(id);
+        ProductVariantPojo after = crudService.update(input, id)
+            .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
+        auditVariantChange("VARIANT_UPDATE", before, after, principal, null);
     }
 
     @PatchMapping("/{id}")
@@ -108,10 +130,14 @@ public class DataProductVariantsController
 
     public void partialUpdate(
         @RequestBody Map<String, Object> input,
-        @PathVariable Long id
+        @PathVariable Long id,
+        Principal principal
     ) throws BadInputException, EntityNotFoundException {
+        ProductVariantPojo before = safeFindById(id);
         crudService.partialUpdate(input, id)
             .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
+        ProductVariantPojo after = safeFindById(id);
+        auditVariantChange("VARIANT_PATCH", before, after, principal, null);
     }
 
     @DeleteMapping("/{id}")
@@ -125,9 +151,11 @@ public class DataProductVariantsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
     })
 
-    public void delete(@PathVariable Long id)
+    public void delete(@PathVariable Long id, Principal principal)
         throws EntityNotFoundException {
+        ProductVariantPojo before = safeFindById(id);
         crudService.delete(id);
+        auditVariantChange("VARIANT_DELETE", before, null, principal, null);
     }
 
     @Override
@@ -161,8 +189,18 @@ public class DataProductVariantsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
     })
-    public BulkOperationResult bulkActivate(@RequestBody List<Long> ids) {
-        return variantsBulkService.bulkActivate(ids);
+    public BulkOperationResult bulkActivate(@RequestBody List<Long> ids, Principal principal) {
+        String correlationId = "variants-bulk-activate-" + UUID.randomUUID();
+        Map<Long, ProductVariantPojo> before = snapshotVariants(ids);
+        BulkOperationResult result = variantsBulkService.bulkActivate(ids);
+        for (Long id : ids) {
+            ProductVariantPojo beforeItem = before.get(id);
+            ProductVariantPojo afterItem = safeFindByIdOrNull(id);
+            if (beforeItem != null || afterItem != null) {
+                auditVariantChange("VARIANT_BULK_ACTIVATE", beforeItem, afterItem, principal, correlationId);
+            }
+        }
+        return result;
     }
 
     /**
@@ -177,8 +215,18 @@ public class DataProductVariantsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
     })
-    public BulkOperationResult bulkDeactivate(@RequestBody List<Long> ids) {
-        return variantsBulkService.bulkDeactivate(ids);
+    public BulkOperationResult bulkDeactivate(@RequestBody List<Long> ids, Principal principal) {
+        String correlationId = "variants-bulk-deactivate-" + UUID.randomUUID();
+        Map<Long, ProductVariantPojo> before = snapshotVariants(ids);
+        BulkOperationResult result = variantsBulkService.bulkDeactivate(ids);
+        for (Long id : ids) {
+            ProductVariantPojo beforeItem = before.get(id);
+            ProductVariantPojo afterItem = safeFindByIdOrNull(id);
+            if (beforeItem != null || afterItem != null) {
+                auditVariantChange("VARIANT_BULK_DEACTIVATE", beforeItem, afterItem, principal, correlationId);
+            }
+        }
+        return result;
     }
 
     /**
@@ -193,8 +241,48 @@ public class DataProductVariantsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
         @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
     })
-    public BulkOperationResult bulkDeleteVariants(@RequestBody List<Long> ids) {
-        return variantsBulkService.bulkDelete(ids);
+    public BulkOperationResult bulkDeleteVariants(@RequestBody List<Long> ids, Principal principal) {
+        String correlationId = "variants-bulk-delete-" + UUID.randomUUID();
+        Map<Long, ProductVariantPojo> before = snapshotVariants(ids);
+        BulkOperationResult result = variantsBulkService.bulkDelete(ids);
+        for (Long id : ids) {
+            ProductVariantPojo beforeItem = before.get(id);
+            if (beforeItem != null) {
+                auditVariantChange("VARIANT_BULK_DELETE", beforeItem, null, principal, correlationId);
+            }
+        }
+        return result;
+    }
+
+    @PostMapping("/bulk-update")
+    @Operation(summary = "Bulk-update variant fields")
+    @PreAuthorize("hasAuthority('products:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCTS_LIST, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.PUBLIC_PRODUCT_DETAIL, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
+    })
+    public BulkOperationResult bulkUpdateVariants(@RequestBody VariantBulkUpdateRequest request, Principal principal) {
+        List<Long> ids = request != null ? request.getIds() : null;
+        String correlationId = "variants-bulk-update-" + UUID.randomUUID();
+        Map<Long, ProductVariantPojo> before = snapshotVariants(ids);
+        BulkOperationResult result = variantsBulkService.bulkUpdate(
+            ids,
+            request != null ? request.getPriceModifier() : null,
+            request != null ? request.getCurrentStock() : null,
+            request != null ? request.getActive() : null
+        );
+        if (ids != null) {
+            for (Long id : ids) {
+                ProductVariantPojo beforeItem = before.get(id);
+                ProductVariantPojo afterItem = safeFindByIdOrNull(id);
+                if (beforeItem != null || afterItem != null) {
+                    auditVariantChange("VARIANT_BULK_UPDATE", beforeItem, afterItem, principal, correlationId);
+                }
+            }
+        }
+        return result;
     }
 
     /**
@@ -211,8 +299,87 @@ public class DataProductVariantsController
         @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true)
     })
     public ProductCsvImportResult importVariants(
-        @RequestPart("file") org.springframework.web.multipart.MultipartFile file
+        @RequestPart("file") org.springframework.web.multipart.MultipartFile file,
+        Principal principal
     ) throws IOException {
-        return variantsBulkService.importVariants(file);
+        ProductCsvImportResult result = variantsBulkService.importVariants(file);
+        productAuditLogService.recordBestEffort(new ProductAuditLogService.AuditEvent(
+            "VARIANT_IMPORT",
+            ProductAuditLog.EntityType.VARIANT,
+            0L,
+            null,
+            null,
+            null,
+            null,
+            result,
+            "Imported variants from CSV",
+            actor(principal),
+            "ADMIN_API",
+            "variants-import-" + UUID.randomUUID()
+        ));
+        return result;
+    }
+
+    private Map<Long, ProductVariantPojo> snapshotVariants(List<Long> ids) {
+        Map<Long, ProductVariantPojo> snapshots = new HashMap<>();
+        if (ids == null) {
+            return snapshots;
+        }
+        for (Long id : ids) {
+            ProductVariantPojo found = safeFindByIdOrNull(id);
+            if (found != null) {
+                snapshots.put(id, found);
+            }
+        }
+        return snapshots;
+    }
+
+    private ProductVariantPojo safeFindById(Long id) {
+        return crudService.findById(id);
+    }
+
+    private ProductVariantPojo safeFindByIdOrNull(Long id) {
+        try {
+            return safeFindById(id);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void auditVariantChange(
+        String action,
+        ProductVariantPojo before,
+        ProductVariantPojo after,
+        Principal principal,
+        String correlationId
+    ) {
+        ProductVariantPojo anchor = after != null ? after : before;
+        if (anchor == null || anchor.getId() == null) {
+            return;
+        }
+        Long productId = null;
+        if (anchor.getProductBarcode() != null) {
+            productId = productsRepository.findByBarcode(anchor.getProductBarcode())
+                .map(org.monostudio.jpa.entities.Product::getId)
+                .orElse(null);
+        }
+        productAuditLogService.recordBestEffort(new ProductAuditLogService.AuditEvent(
+            action,
+            ProductAuditLog.EntityType.VARIANT,
+            anchor.getId(),
+            productId,
+            anchor.getId(),
+            anchor.getSku(),
+            before,
+            after,
+            "Variant change: " + action,
+            actor(principal),
+            "ADMIN_API",
+            correlationId
+        ));
+    }
+
+    private String actor(Principal principal) {
+        return principal != null ? principal.getName() : "system";
     }
 }

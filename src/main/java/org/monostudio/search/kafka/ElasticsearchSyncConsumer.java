@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @Slf4j
@@ -50,6 +51,7 @@ public class ElasticsearchSyncConsumer {
     private void handleUpsert(IndexEvent event) {
         if ("PRODUCT".equals(event.getEntityType())) {
             productsRepository.findById(event.getEntityId()).ifPresent(product -> {
+                WeatherProfile weatherProfile = inferWeatherProfile(product);
                 ProductDocument doc = ProductDocument.builder()
                         .id(product.getId().toString())
                         .name(product.getName())
@@ -58,6 +60,9 @@ public class ElasticsearchSyncConsumer {
                         .price(product.getPrice())
                         .categoryName(product.getProductCategory() != null ? product.getProductCategory().getName() : null)
                         .categoryCodes(extractCategoryHierarchy(product.getProductCategory()))
+                        .weatherTags(weatherProfile.tags())
+                        .tempMin(weatherProfile.tempMin())
+                        .tempMax(weatherProfile.tempMax())
                         .status(product.getStatus() != null ? product.getStatus().name() : null)
                         .primaryImageUrl(productsConverterService.extractPrimaryImageUrl(
                                 productImagesRepository.deepFindProductImagesByProductIdOrdered(product.getId())
@@ -100,5 +105,52 @@ public class ElasticsearchSyncConsumer {
             blogPostSearchRepository.deleteById(event.getEntityId().toString());
             log.info("Deleted BlogPost from Index: {}", event.getEntityId());
         }
+    }
+
+    private WeatherProfile inferWeatherProfile(Product product) {
+        String raw = ((product.getName() == null ? "" : product.getName()) + " "
+                + (product.getDescription() == null ? "" : product.getDescription()) + " "
+                + (product.getProductCategory() != null && product.getProductCategory().getName() != null
+                ? product.getProductCategory().getName()
+                : ""))
+                .toLowerCase(Locale.ROOT);
+
+        List<String> tags = new ArrayList<>();
+        int tempMin = 20;
+        int tempMax = 35;
+
+        if (containsAny(raw, "ao khoac", "hoodie", "sweater", "len", "dai tay", "jacket", "coat")) {
+            tempMin = 10;
+            tempMax = 24;
+            tags.add("cold");
+            tags.add("windy");
+        } else if (containsAny(raw, "ao mua", "raincoat", "chong nuoc", "du", "waterproof")) {
+            tempMin = 16;
+            tempMax = 30;
+            tags.add("rain");
+            tags.add("windy");
+        } else if (containsAny(raw, "ao thun", "t-shirt", "tank", "short", "vay ngan")) {
+            tempMin = 24;
+            tempMax = 38;
+            tags.add("clear");
+            tags.add("hot");
+        } else {
+            tags.add("clear");
+            tags.add("cloudy");
+        }
+
+        return new WeatherProfile(tags, tempMin, tempMax);
+    }
+
+    private boolean containsAny(String value, String... candidates) {
+        for (String candidate : candidates) {
+            if (value.contains(candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private record WeatherProfile(List<String> tags, int tempMin, int tempMax) {
     }
 }

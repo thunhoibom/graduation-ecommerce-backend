@@ -103,6 +103,19 @@ public class AdminDashboardController {
         return dashboardService.getLowStockAlerts();
     }
 
+    /**
+     * Low-stock variants with suggested restock quantity based on recent sales velocity.
+     */
+    @GetMapping("/stats/low-stock/restock-suggestions")
+    @PreAuthorize("hasAuthority('dashboard:read')")
+    @Operation(summary = "Get low-stock variants with suggested restock quantity.")
+    public Collection<RestockSuggestionPojo> getLowStockRestockSuggestions(
+        @RequestParam(defaultValue = "30") int lookbackDays,
+        @RequestParam(defaultValue = "14") int leadTimeDays
+    ) {
+        return dashboardService.getLowStockRestockSuggestions(lookbackDays, leadTimeDays);
+    }
+
     // ─── Order Status Breakdown ─────────────────────────────────────────────────
 
     /**

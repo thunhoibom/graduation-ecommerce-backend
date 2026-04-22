@@ -11,6 +11,7 @@ public final class CacheNames {
     public static final String PUBLIC_CATEGORY_BY_CODE = "publicCategoryByCode";
     public static final String PUBLIC_SHIPPING_METHODS = "publicShippingMethods";
     public static final String PUBLIC_DISCOUNT_VALIDATION = "publicDiscountValidation";
+    public static final String ACTIVE_PROMOTION_RULES = "activePromotionRules";
     public static final String ADMIN_DASHBOARD_STATS = "adminDashboardStats";
     public static final String ADMIN_REVENUE_STATS = "adminRevenueStats";
     public static final String ADMIN_TOP_PRODUCTS = "adminTopProducts";

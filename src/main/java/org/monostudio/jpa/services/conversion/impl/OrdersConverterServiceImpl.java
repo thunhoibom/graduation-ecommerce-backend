@@ -240,10 +240,9 @@ public class OrdersConverterServiceImpl
                 variant = productVariantsRepository.findById(detail.getVariantId())
                     .orElseThrow(() -> new BadInputException("Variant not found: " + detail.getVariantId()));
                 product = variant.getProduct();
-                // Use provided unit value if set; otherwise compute from product + variant modifier
-                unitValue = detail.getUnitValue() > 0
-                    ? detail.getUnitValue()
-                    : product.getPrice() + variant.getPriceModifier();
+                // Enforce canonical variant pricing from server-side data.
+                // Client-provided unitValue must not override variant pricing.
+                unitValue = product.getPrice() + variant.getPriceModifier();
             } else {
                 // Legacy path — resolve by barcode
                 String barcode = detail.getProduct() != null ? detail.getProduct().getBarcode() : null;

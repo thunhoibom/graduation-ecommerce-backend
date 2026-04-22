@@ -136,7 +136,15 @@ public class StockAdjustment
         /** Admin cancelled a paid order — stockCurrent restored to inventory */
         ORDER_CANCELLED,
         /** Admin rejected a paid order — stockCurrent restored to inventory */
-        ORDER_REJECTED
+        ORDER_REJECTED,
+        /** Goods receipt from purchase order */
+        PURCHASE_ORDER_RECEIPT,
+        /** Internal transfer takes stock out of source location */
+        TRANSFER_OUTBOUND,
+        /** Internal transfer puts stock into destination location */
+        TRANSFER_INBOUND,
+        /** Variance posted from approved stock count */
+        STOCK_COUNT_VARIANCE
     }
 
     /**

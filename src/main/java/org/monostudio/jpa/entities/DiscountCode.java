@@ -18,6 +18,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
@@ -144,6 +146,13 @@ public class DiscountCode
     @Builder.Default
     private boolean active = true;
 
+    /**
+     * Optional link to a structured promotion rule (display / combinable metadata).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "discount_promotion_rule_id")
+    private PromotionRule promotionRule;
+
     @CreationTimestamp
     @Column(name = "discount_created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -170,6 +179,7 @@ public class DiscountCode
         this.validFrom = source.validFrom;
         this.validUntil = source.validUntil;
         this.active = source.active;
+        this.promotionRule = source.promotionRule;
         this.createdAt = source.createdAt;
         this.updatedAt = source.updatedAt;
     }

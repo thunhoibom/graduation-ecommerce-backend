@@ -51,9 +51,18 @@ public class ProductsConverterServiceImpl
 
     @Override
     public ProductPojo convertToPojo(Product source) {
-        int reservedStock = source.getVariants() != null
-            ? source.getVariants().stream().mapToInt(org.monostudio.jpa.entities.ProductVariant::getStockReserved).sum()
-            : 0;
+        int currentStock = source.getStockCurrent();
+        int reservedStock = 0;
+        int criticalStock = source.getStockCritical();
+        if (source.getVariants() != null && !source.getVariants().isEmpty()) {
+            var activeVariants = source.getVariants().stream()
+                .filter(org.monostudio.jpa.entities.ProductVariant::isActive)
+                .toList();
+            var stockSource = activeVariants.isEmpty() ? source.getVariants() : activeVariants;
+            currentStock = stockSource.stream().mapToInt(org.monostudio.jpa.entities.ProductVariant::getStockCurrent).sum();
+            reservedStock = stockSource.stream().mapToInt(org.monostudio.jpa.entities.ProductVariant::getStockReserved).sum();
+            criticalStock = stockSource.stream().mapToInt(org.monostudio.jpa.entities.ProductVariant::getStockCritical).sum();
+        }
 
         ProductPojo target = ProductPojo.builder()
             .id(source.getId())
@@ -62,9 +71,9 @@ public class ProductsConverterServiceImpl
 
             .price(source.getPrice())
             .description(source.getDescription())
-            .currentStock(source.getStockCurrent())
+            .currentStock(currentStock)
             .reservedStock(reservedStock)
-            .criticalStock(source.getStockCritical())
+            .criticalStock(criticalStock)
             .status(source.getStatus() != null ? source.getStatus().name() : ProductStatus.DRAFT.name())
             .build();
 
