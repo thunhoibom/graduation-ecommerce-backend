@@ -1,7 +1,5 @@
 package org.monostudio.api.controllers;
 
-import com.querydsl.core.types.Predicate;
-import io.jsonwebtoken.lang.Maps;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.monostudio.payment.PaymentService;
@@ -10,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,21 +19,20 @@ import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.services.CheckoutService;
 import org.monostudio.common.exceptions.BadInputException;
-import org.monostudio.jpa.services.crud.OrdersCrudService;
-import org.monostudio.jpa.services.predicates.OrdersPredicateService;
 import org.monostudio.payment.PaymentServiceException;
 
-import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.RequestHeader;
 import java.net.URI;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 import static org.springframework.http.HttpStatus.SEE_OTHER;
 import static org.monostudio.config.Constants.AUTHORITY_CHECKOUT;
+import static org.monostudio.config.Constants.MOMO_ORDER_ID_PARAM;
+import static org.monostudio.config.Constants.MOMO_RESULT_CODE_PARAM;
 import static org.monostudio.config.Constants.VNPAY_TXN_REF_PARAM;
 import static org.monostudio.config.Constants.VNPAY_RESPONSE_CODE_PARAM;
 
@@ -45,18 +41,10 @@ import static org.monostudio.config.Constants.VNPAY_RESPONSE_CODE_PARAM;
 @Tag(name = "Checkout")
 public class PublicCheckoutController {
     private final CheckoutService service;
-    private final OrdersCrudService ordersCrudService;
-    private final OrdersPredicateService ordersPredicateService;
 
     @Autowired
-    public PublicCheckoutController(
-        CheckoutService service,
-        OrdersCrudService ordersCrudService,
-        OrdersPredicateService ordersPredicateService
-    ) {
+    public PublicCheckoutController(CheckoutService service) {
         this.service = service;
-        this.ordersCrudService = ordersCrudService;
-        this.ordersPredicateService = ordersPredicateService;
     }
 
     /**
@@ -101,11 +89,7 @@ public class PublicCheckoutController {
     @Operation(summary = "Request that an order status be updated after having begun checkout")
     public ResponseEntity<Void> validateTransaction(@RequestParam Map<String, String> transactionData)
         throws BadInputException, EntityNotFoundException, PaymentServiceException {
-        if (!transactionData.containsKey(VNPAY_TXN_REF_PARAM)) {
-            throw new BadInputException("No transaction token was provided");
-        }
-        String token = transactionData.get(VNPAY_TXN_REF_PARAM);
-        String responseCode = transactionData.get(VNPAY_RESPONSE_CODE_PARAM);
+        String token = resolveToken(transactionData);
 
         // Resolve payment service to validate callback hash/integrity
         OrderPojo order = service.getOrderByToken(token);
@@ -114,7 +98,7 @@ public class PublicCheckoutController {
             throw new PaymentServiceException("Invalid payment callback security hash");
         }
 
-        boolean isAborted = responseCode == null || !responseCode.equals("00");
+        boolean isAborted = isAborted(order.getPaymentType(), transactionData);
         service.confirmTransaction(token, isAborted);
 
         URI transactionUri = service.generateResultPageUrl(token);
@@ -122,6 +106,65 @@ public class PublicCheckoutController {
             .status(SEE_OTHER)
             .location(transactionUri)
             .build();
+    }
+
+    /**
+     * Handles MOMO server-to-server notify URL callbacks (JSON body).
+     * Returns acknowledgement response expected by MOMO.
+     */
+    @PostMapping("/validate")
+    @Operation(summary = "Validate payment callback from gateway server-side notification")
+    public ResponseEntity<Map<String, Object>> validateTransactionNotify(@RequestBody Map<String, Object> transactionData)
+        throws BadInputException, EntityNotFoundException, PaymentServiceException {
+        Map<String, String> normalized = normalize(transactionData);
+        String token = resolveToken(normalized);
+
+        OrderPojo order = service.getOrderByToken(token);
+        PaymentService paymentService = service.getPaymentService(order.getPaymentType());
+        if (!paymentService.validateCallback(normalized)) {
+            throw new PaymentServiceException("Invalid payment callback security hash");
+        }
+
+        boolean isAborted = isAborted(order.getPaymentType(), normalized);
+        service.confirmTransaction(token, isAborted);
+
+        Map<String, Object> acknowledgement = new LinkedHashMap<>();
+        acknowledgement.put("resultCode", 0);
+        acknowledgement.put("message", "OK");
+        return ResponseEntity.ok(acknowledgement);
+    }
+
+    private String resolveToken(Map<String, String> transactionData) throws BadInputException {
+        String token = transactionData.get(VNPAY_TXN_REF_PARAM);
+        if (token == null || token.isBlank()) {
+            token = transactionData.get(MOMO_ORDER_ID_PARAM);
+        }
+        if (token == null || token.isBlank()) {
+            throw new BadInputException("No transaction token was provided");
+        }
+        return token;
+    }
+
+    private boolean isAborted(String paymentType, Map<String, String> transactionData) {
+        if ("VNPAY".equalsIgnoreCase(paymentType)) {
+            String responseCode = transactionData.get(VNPAY_RESPONSE_CODE_PARAM);
+            return responseCode == null || !responseCode.equals("00");
+        }
+        if ("MOMO".equalsIgnoreCase(paymentType)) {
+            String resultCode = transactionData.get(MOMO_RESULT_CODE_PARAM);
+            return resultCode == null || !resultCode.equals("0");
+        }
+        String fallbackCode = transactionData.getOrDefault(MOMO_RESULT_CODE_PARAM,
+            transactionData.get(VNPAY_RESPONSE_CODE_PARAM));
+        return fallbackCode == null || (!fallbackCode.equals("0") && !fallbackCode.equals("00"));
+    }
+
+    private Map<String, String> normalize(Map<String, Object> transactionData) {
+        Map<String, String> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : transactionData.entrySet()) {
+            normalized.put(entry.getKey(), entry.getValue() == null ? null : String.valueOf(entry.getValue()));
+        }
+        return normalized;
     }
 
     @ResponseStatus(INTERNAL_SERVER_ERROR)

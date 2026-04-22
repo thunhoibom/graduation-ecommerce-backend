@@ -10,6 +10,7 @@ import org.monostudio.api.models.ReturnRequestItemPojo;
 import org.monostudio.api.models.ReturnRequestPojo;
 import org.monostudio.api.services.RefundRetryService;
 import org.monostudio.api.services.ReturnRequestService;
+import org.monostudio.api.services.LoyaltyService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.ProductVariant;
 import org.monostudio.jpa.entities.ReturnRequest;
@@ -50,6 +51,7 @@ public class ReturnRequestServiceImpl
     private final KafkaMailProducer kafkaMailProducer;
     private final Map<String, PaymentService> paymentServices;
     private final RefundRetryService refundRetryService;
+    private final LoyaltyService loyaltyService;
 
     @Autowired
     public ReturnRequestServiceImpl(
@@ -63,7 +65,8 @@ public class ReturnRequestServiceImpl
         StockAdjustmentService stockAdjustmentService,
         KafkaMailProducer kafkaMailProducer,
         @Autowired(required = false) Map<String, PaymentService> paymentServices,
-        @Autowired(required = false) RefundRetryService refundRetryService
+        @Autowired(required = false) RefundRetryService refundRetryService,
+        LoyaltyService loyaltyService
     ) {
         this.returnRequestsRepository = returnRequestsRepository;
         this.itemsRepository = itemsRepository;
@@ -76,6 +79,7 @@ public class ReturnRequestServiceImpl
         this.kafkaMailProducer = kafkaMailProducer;
         this.paymentServices = paymentServices;
         this.refundRetryService = refundRetryService;
+        this.loyaltyService = loyaltyService;
     }
 
     @Override
@@ -253,6 +257,13 @@ public class ReturnRequestServiceImpl
         }
 
         ReturnRequest saved = returnRequestsRepository.saveAndFlush(existing);
+        if (refundSucceeded) {
+            try {
+                loyaltyService.syncRefundReversalForOrder(order.getId());
+            } catch (RuntimeException e) {
+                logger.error("Failed to sync loyalty refund reversal for order {}: {}", order.getId(), e.getMessage());
+            }
+        }
         List<ReturnRequestItem> items = itemsRepository.findByReturnRequestId(id);
         ReturnRequestPojo pojo = buildReturnRequestPojo(saved, items);
         kafkaMailProducer.sendReturnRequestStatusToClient(pojo);

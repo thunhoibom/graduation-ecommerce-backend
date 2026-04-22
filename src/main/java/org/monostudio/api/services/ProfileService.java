@@ -1,6 +1,7 @@
 package org.monostudio.api.services;
 
 import org.monostudio.api.models.PersonPojo;
+import org.monostudio.api.models.LoyaltyProfilePojo;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.exceptions.UserNotFoundException;
 
@@ -20,6 +21,8 @@ public interface ProfileService {
      * @throws EntityNotFoundException When no user with the provided name exists.
      */
     PersonPojo getProfileFromUserName(String userName) throws EntityNotFoundException;
+
+    LoyaltyProfilePojo getLoyaltyProfileFromUserName(String userName) throws EntityNotFoundException;
 
     /**
      * Updates personal information for a given user.

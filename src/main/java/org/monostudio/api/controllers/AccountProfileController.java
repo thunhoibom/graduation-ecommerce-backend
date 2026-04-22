@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.monostudio.api.models.LoyaltyProfilePojo;
 import org.monostudio.api.models.PersonPojo;
 import org.monostudio.api.services.ProfileService;
 import org.monostudio.common.exceptions.BadInputException;
@@ -36,6 +37,13 @@ public class AccountProfileController {
         throws EntityNotFoundException {
         String username = principal.getName();
         return userProfileService.getProfileFromUserName(username);
+    }
+
+    @GetMapping("/loyalty")
+    @Operation(summary = "View loyalty points and tier")
+    public LoyaltyProfilePojo getLoyaltyProfile(Principal principal) throws EntityNotFoundException {
+        String username = principal.getName();
+        return userProfileService.getLoyaltyProfileFromUserName(username);
     }
 
     @PutMapping

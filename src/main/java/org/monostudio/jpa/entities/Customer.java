@@ -46,6 +46,14 @@ public class Customer
     @Builder.Default
     private int monthlySpendCents = 0;
 
+    @Column(name = "customer_loyalty_points_balance", nullable = false, columnDefinition = "integer default 0")
+    @Builder.Default
+    private int loyaltyPointsBalance = 0;
+
+    @Column(name = "customer_lifetime_points_earned", nullable = false, columnDefinition = "integer default 0")
+    @Builder.Default
+    private int lifetimePointsEarned = 0;
+
     /**
      * Please note: this copy-constructor DOES include a Customer's relationship to its own profile data
      *
@@ -56,5 +64,7 @@ public class Customer
         this.person = new Person(source.person);
         this.loyaltyTier = source.loyaltyTier;
         this.monthlySpendCents = source.monthlySpendCents;
+        this.loyaltyPointsBalance = source.loyaltyPointsBalance;
+        this.lifetimePointsEarned = source.lifetimePointsEarned;
     }
 }

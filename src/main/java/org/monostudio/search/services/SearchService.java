@@ -147,4 +147,47 @@ public class SearchService {
                 .items(items)
                 .build();
     }
+
+    public WeatherCategoryRecommendationPojo recommendByWeather(
+            Double latitude,
+            Double longitude,
+            int limit
+    ) {
+        WeatherContextPojo weatherContext = weatherContextService.resolve(latitude, longitude);
+        int targetTemp = weatherContext.getTemperature() != null
+                ? (int) Math.round(weatherContext.getTemperature())
+                : 25;
+
+        Pageable pageable = PageRequest.of(0, Math.max(1, limit));
+        Query query = NativeQuery.builder()
+                .withPageable(pageable)
+                .withQuery(q -> q.bool(b -> b
+                        .filter(f -> f.term(t -> t.field("status").value("PUBLISHED")))
+                        .should(s -> s.term(t -> t
+                                .field("weatherTags")
+                                .value(weatherContext.getWeatherTag())
+                                .boost(2.0f)))
+                        .should(s -> s.bool(tempBoost -> tempBoost
+                                .must(m1 -> m1.range(r -> r
+                                        .field("tempMin")
+                                        .lte(JsonData.of(targetTemp))))
+                                .must(m2 -> m2.range(r -> r
+                                        .field("tempMax")
+                                        .gte(JsonData.of(targetTemp))))
+                                .boost(1.5f)))
+                        .minimumShouldMatch("0")
+                ))
+                .build();
+
+        SearchHits<ProductDocument> searchHits = elasticsearchOperations.search(query, ProductDocument.class);
+        List<ProductDocument> items = searchHits.getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        return WeatherCategoryRecommendationPojo.builder()
+                .sectionTitle("Goi y theo thoi tiet hom nay")
+                .weatherContext(weatherContext)
+                .items(items)
+                .build();
+    }
 }

@@ -13,6 +13,7 @@ import org.monostudio.mailing.kafka.KafkaMailProducer;
 import org.monostudio.ordering.kafka.KafkaOrderProducer;
 import org.monostudio.api.services.RefundRetryService;
 import org.monostudio.api.services.DiscountService;
+import org.monostudio.api.services.LoyaltyService;
 import org.monostudio.api.services.OrdersProcessService;
 import org.monostudio.api.services.StockReservationService;
 import org.monostudio.common.exceptions.BadInputException;
@@ -53,6 +54,8 @@ import static org.monostudio.config.Constants.ORDER_STATUS_PAYMENT_STARTED;
 import static org.monostudio.config.Constants.ORDER_STATUS_PENDING;
 import static org.monostudio.config.Constants.ORDER_STATUS_REJECTED;
 import static org.monostudio.config.Constants.ORDER_STATUS_RETURNED;
+import static org.monostudio.config.Constants.LOYALTY_EVENT_REVERSE_REJECTED;
+import static org.monostudio.config.Constants.LOYALTY_EVENT_REVERSE_RETURNED;
 import org.monostudio.config.cache.CacheNames;
 
 @Transactional
@@ -75,6 +78,7 @@ public class OrdersProcessServiceImpl
     private final DiscountService discountService;
     private final Map<String, PaymentService> paymentServices;
     private final RefundRetryService refundRetryService;
+    private final LoyaltyService loyaltyService;
     private final CartSessionsRepository cartSessionsRepository;
     private final CartItemsRepository cartItemsRepository;
 
@@ -91,6 +95,7 @@ public class OrdersProcessServiceImpl
         DiscountService discountService,
         @Autowired(required = false) Map<String, PaymentService> paymentServices,
         @Autowired(required = false) RefundRetryService refundRetryService,
+        LoyaltyService loyaltyService,
         CartSessionsRepository cartSessionsRepository,
         CartItemsRepository cartItemsRepository
     ) {
@@ -106,6 +111,7 @@ public class OrdersProcessServiceImpl
         this.discountService = discountService;
         this.paymentServices = paymentServices;
         this.refundRetryService = refundRetryService;
+        this.loyaltyService = loyaltyService;
         this.cartSessionsRepository = cartSessionsRepository;
         this.cartItemsRepository = cartItemsRepository;
     }
@@ -312,6 +318,13 @@ public class OrdersProcessServiceImpl
             discountService.redeemDiscount(existingOrder.getDiscountCode(), subtotal, customerId, existingOrder.getId());
         }
 
+        // Loyalty accrual should not block order status progression in case of transient errors.
+        try {
+            loyaltyService.awardForPaidOrder(existingOrder.getId());
+        } catch (RuntimeException e) {
+            logger.error("Failed to award loyalty points for order {}: {}", existingOrder.getId(), e.getMessage());
+        }
+
         sendClientEmail(target);
         sendOwnerEmail(target);
         // Publish ORDER_PAID event → KafkaOrderConsumer clears the cart session asynchronously
@@ -448,6 +461,12 @@ public class OrdersProcessServiceImpl
                 existingOrder.getId(), existingOrder.getTotalValue());
         }
 
+        try {
+            loyaltyService.reverseForOrder(existingOrder.getId(), LOYALTY_EVENT_REVERSE_REJECTED);
+        } catch (RuntimeException e) {
+            logger.error("Failed to reverse loyalty points for rejected order {}: {}", existingOrder.getId(), e.getMessage());
+        }
+
         sendClientEmail(target);
         sendOwnerEmail(target);
         kafkaOrderProducer.publishOrderRejected(existingOrder.getId());
@@ -578,6 +597,11 @@ public class OrdersProcessServiceImpl
         ordersRepository.setStatus(existingOrder.getId(), returnedStatus.get());
         OrderPojo target = this.convertOrThrowException(existingOrder);
         target.setStatus(ORDER_STATUS_RETURNED);
+        try {
+            loyaltyService.reverseForOrder(existingOrder.getId(), LOYALTY_EVENT_REVERSE_RETURNED);
+        } catch (RuntimeException e) {
+            logger.error("Failed to reverse loyalty points for returned order {}: {}", existingOrder.getId(), e.getMessage());
+        }
         sendClientEmail(target);
         sendOwnerEmail(target);
         return target;

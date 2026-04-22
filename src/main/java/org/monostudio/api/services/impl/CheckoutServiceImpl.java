@@ -326,7 +326,7 @@ public class CheckoutServiceImpl
         // This prevents double-confirm (double stock deduction) and double-abort.
         // The token is the gateway's unique identifier for this payment attempt.
         if (paymentCallbackLogRepository.existsByToken(transactionToken)) {
-            OrderPojo existing = this.getSellRequestedWithMatchingToken(transactionToken);
+            OrderPojo existing = this.getOrderWithMatchingToken(transactionToken);
             logger.info("Payment callback token {} already processed (orderId={}) — skipping duplicate callback",
                 transactionToken, existing.getBuyOrder());
             return existing;
@@ -352,7 +352,7 @@ public class CheckoutServiceImpl
 
     @Override
     public URI generateResultPageUrl(String transactionToken) {
-        OrderPojo order = this.getSellRequestedWithMatchingToken(transactionToken);
+        OrderPojo order = this.getOrderWithMatchingToken(transactionToken);
         PaymentService paymentService = paymentServices.get(order.getPaymentType());
         try {
             String url = (paymentService.getPaymentResultPageUrl() + "?token=" + transactionToken);
@@ -378,7 +378,7 @@ public class CheckoutServiceImpl
                 // This prevents fraud where a lower amount is charged but the order is created for more.
                 int authorized = result.getAuthorizedAmount();
                 int orderTotal = sellByToken.getTotalValue();
-                if (authorized != orderTotal && !"COD".equals(sellByToken.getPaymentType()) && !"VNPAY".equals(sellByToken.getPaymentType())) {
+                if (authorized != orderTotal && shouldVerifyAuthorizedAmount(sellByToken.getPaymentType())) {
                     logger.error("Payment amount mismatch for token {}: authorized={}, orderTotal={}",
                         transactionToken, authorized, orderTotal);
                     // Treat as failed — do not mark as paid for a mismatched amount.
@@ -421,7 +421,7 @@ public class CheckoutServiceImpl
 
     @Override
     public OrderPojo getOrderByToken(String token) throws EntityNotFoundException {
-        return this.getSellRequestedWithMatchingToken(token);
+        return this.getOrderWithMatchingToken(token);
     }
 
     @Override
@@ -435,6 +435,12 @@ public class CheckoutServiceImpl
             "token", transactionToken));
         Predicate startedTransactionWithMatchingToken = ordersPredicateService.parseMap(startedWithTokenMatcher);
         return ordersCrudService.readOne(startedTransactionWithMatchingToken);
+    }
+
+    private OrderPojo getOrderWithMatchingToken(String transactionToken) throws EntityNotFoundException {
+        Order order = ordersRepository.findByTransactionToken(transactionToken)
+            .orElseThrow(() -> new EntityNotFoundException("Order with transaction token not found: " + transactionToken));
+        return ordersConverterService.convertToPojo(order);
     }
 
     private Long resolveCustomerIdForCheckout(CheckoutStartRequest request) {
@@ -486,5 +492,9 @@ public class CheckoutServiceImpl
             logger.error("Failed to log payment callback for token {}: {}",
                 token, e.getMessage());
         }
+    }
+
+    private boolean shouldVerifyAuthorizedAmount(String paymentType) {
+        return !"COD".equalsIgnoreCase(paymentType) && !"VNPAY".equalsIgnoreCase(paymentType);
     }
 }

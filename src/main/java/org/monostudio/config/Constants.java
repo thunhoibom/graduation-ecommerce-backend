@@ -25,8 +25,16 @@ public final class Constants {
     public static final String BILLING_TYPE_ENTERPRISE = "Enterprise Invoice";
     public static final String VNPAY_TXN_REF_PARAM = "vnp_TxnRef";
     public static final String VNPAY_RESPONSE_CODE_PARAM = "vnp_ResponseCode";
+    public static final String MOMO_ORDER_ID_PARAM = "orderId";
+    public static final String MOMO_RESULT_CODE_PARAM = "resultCode";
     public static final String AUTHORITY_CHECKOUT = "checkout";
     public static final String JWT_CLAIM_AUTHORITIES = "authorities";
     public static final String JWT_PREFIX = "Bearer ";
     public static final String PERSON_DATA_MAP_KEYS_PREFIX = "person.";
+    public static final String LOYALTY_TIER_SILVER = "Silver";
+    public static final String LOYALTY_TIER_GOLD = "Gold";
+    public static final String LOYALTY_EVENT_EARN_PAID = "EARN_PAID";
+    public static final String LOYALTY_EVENT_REVERSE_REJECTED = "REVERSE_REJECTED";
+    public static final String LOYALTY_EVENT_REVERSE_RETURNED = "REVERSE_RETURNED";
+    public static final String LOYALTY_EVENT_REVERSE_REFUND = "REVERSE_REFUND";
 }

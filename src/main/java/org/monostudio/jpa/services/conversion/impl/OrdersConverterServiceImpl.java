@@ -284,6 +284,8 @@ public class OrdersConverterServiceImpl
                 normalizedName = "COD";
             } else if (normalizedName.equalsIgnoreCase("VNPAY") || normalizedName.equalsIgnoreCase("WebPay Plus")) {
                 normalizedName = "VNPAY";
+            } else if (normalizedName.equalsIgnoreCase("MOMO") || normalizedName.equalsIgnoreCase("MO MO")) {
+                normalizedName = "MOMO";
             }
 
             final String finalPaymentType = normalizedName;
@@ -300,8 +302,15 @@ public class OrdersConverterServiceImpl
             }
 
             // 2. If name search failed but it's a common type, try finding by known IDs
-            // (Mapping based on data.sql: 1=VNPAY, 2=COD)
-            Long targetId = finalPaymentType.equals("VNPAY") ? 1L : (finalPaymentType.equals("COD") ? 2L : null);
+            // (Mapping based on data.sql: 1=VNPAY, 2=COD, 3=MOMO if present)
+            Long targetId = null;
+            if ("VNPAY".equals(finalPaymentType)) {
+                targetId = Long.valueOf(1L);
+            } else if ("COD".equals(finalPaymentType)) {
+                targetId = Long.valueOf(2L);
+            } else if ("MOMO".equals(finalPaymentType)) {
+                targetId = Long.valueOf(3L);
+            }
             if (targetId != null) {
                 Optional<PaymentType> foundById = paymentTypesRepository.findById(targetId);
                 if (foundById.isPresent()) {
@@ -314,7 +323,7 @@ public class OrdersConverterServiceImpl
             }
 
             // 3. Last resort: try to create it (Risk: might fail if sequence is out of sync)
-            if (finalPaymentType.equals("VNPAY") || finalPaymentType.equals("COD")) {
+            if (finalPaymentType.equals("VNPAY") || finalPaymentType.equals("COD") || finalPaymentType.equals("MOMO")) {
                 PaymentType newType = PaymentType.builder()
                     .name(finalPaymentType)
                     .build();

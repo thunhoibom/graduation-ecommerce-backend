@@ -155,6 +155,7 @@ public class ProductVariant
         this.stockCurrent = source.stockCurrent;
         this.stockCritical = source.stockCritical;
         this.stockReserved = source.stockReserved;
+        this.version = source.version;
         this.active = source.active;
         this.barcode = source.barcode;
         this.product = null;

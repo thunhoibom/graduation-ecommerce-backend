@@ -155,4 +155,15 @@ public class PublicProductsController {
         int safeLimit = (limit == null || limit <= 0) ? 12 : Math.min(limit, 30);
         return searchService.recommendByWeatherAndCategory(categoryCode, latitude, longitude, safeLimit);
     }
+
+    @GetMapping("/recommendations/weather")
+    @Operation(summary = "Get weather-aware recommendations without category filter")
+    public WeatherCategoryRecommendationPojo getWeatherRecommendations(
+            @RequestParam(value = "lat", required = false) Double latitude,
+            @RequestParam(value = "lon", required = false) Double longitude,
+            @RequestParam(value = "limit", defaultValue = "8") Integer limit
+    ) {
+        int safeLimit = (limit == null || limit <= 0) ? 8 : Math.min(limit, 30);
+        return searchService.recommendByWeather(latitude, longitude, safeLimit);
+    }
 }

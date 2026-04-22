@@ -88,8 +88,9 @@ public class ProductVariantsCrudServiceImpl
     @Transactional
     public Optional<ProductVariantPojo> update(ProductVariantPojo input, Long id)
         throws EntityNotFoundException, BadInputException {
-        ProductVariant prepared = productVariantsConverterService.convertToNewEntity(input);
-        prepared.setId(id);
+        ProductVariant existing = productVariantsRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException(ITEM_NOT_FOUND));
+        ProductVariant prepared = productVariantsConverterService.applyChangesToExistingEntity(input, existing);
         validateUniqueCombination(prepared, id);
         ProductVariant persistent = productVariantsRepository.saveAndFlush(prepared);
         ProductVariantPojo target = productVariantsConverterService.convertToPojo(persistent);

@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.RefundResultPojo;
+import org.monostudio.api.services.LoyaltyService;
 import org.monostudio.api.services.RefundRetryService;
 import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.entities.RefundRetryQueue;
@@ -43,16 +44,19 @@ public class RefundRetryServiceImpl
     private final RefundRetryQueueRepository queueRepository;
     private final OrdersRepository ordersRepository;
     private final Map<String, PaymentService> paymentServices;
+    private final LoyaltyService loyaltyService;
 
     @Autowired
     public RefundRetryServiceImpl(
         RefundRetryQueueRepository queueRepository,
         OrdersRepository ordersRepository,
-        @Autowired(required = false) Map<String, PaymentService> paymentServices
+        @Autowired(required = false) Map<String, PaymentService> paymentServices,
+        LoyaltyService loyaltyService
     ) {
         this.queueRepository = queueRepository;
         this.ordersRepository = ordersRepository;
         this.paymentServices = paymentServices;
+        this.loyaltyService = loyaltyService;
     }
 
     // ─── Public API ────────────────────────────────────────────────────────────
@@ -185,6 +189,11 @@ public class RefundRetryServiceImpl
         if (order != null) {
             order.setTotalRefundedAmount(order.getTotalRefundedAmount() + entry.getAmount());
             ordersRepository.saveAndFlush(order);
+            try {
+                loyaltyService.syncRefundReversalForOrder(order.getId());
+            } catch (RuntimeException e) {
+                logger.error("Failed to sync loyalty refund reversal for order {}: {}", order.getId(), e.getMessage());
+            }
         }
 
         // TODO (P3): Send email to customer confirming refund

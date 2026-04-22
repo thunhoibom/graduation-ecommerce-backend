@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.PersonPojo;
+import org.monostudio.api.models.LoyaltyProfilePojo;
+import org.monostudio.api.services.LoyaltyService;
 import org.monostudio.api.services.ProfileService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Person;
@@ -16,6 +18,7 @@ import org.monostudio.jpa.services.conversion.PeopleConverterService;
 import org.monostudio.jpa.services.crud.PeopleCrudService;
 import org.monostudio.jpa.services.patch.PeoplePatchService;
 
+import jakarta.persistence.EntityNotFoundException;
 import java.util.Optional;
 
 @Service
@@ -26,6 +29,7 @@ public class ProfileServiceImpl
     private final PeopleConverterService peopleConverter;
     private final PeoplePatchService peoplePatchService;
     private final PeopleRepository peopleRepository;
+    private final LoyaltyService loyaltyService;
 
     @Autowired
     public ProfileServiceImpl(
@@ -33,13 +37,15 @@ public class ProfileServiceImpl
         PeopleCrudService peopleService,
         PeopleConverterService peopleConverter,
         PeoplePatchService peoplePatchService,
-        PeopleRepository peopleRepository
+        PeopleRepository peopleRepository,
+        LoyaltyService loyaltyService
     ) {
         this.usersRepository = usersRepository;
         this.peopleService = peopleService;
         this.peopleConverter = peopleConverter;
         this.peoplePatchService = peoplePatchService;
         this.peopleRepository = peopleRepository;
+        this.loyaltyService = loyaltyService;
     }
 
     @Override
@@ -55,6 +61,11 @@ public class ProfileServiceImpl
         } else {
             return peopleConverter.convertToPojo(person);
         }
+    }
+
+    @Override
+    public LoyaltyProfilePojo getLoyaltyProfileFromUserName(String userName) throws EntityNotFoundException {
+        return loyaltyService.getLoyaltyProfileFromUserName(userName);
     }
 
     @Transactional
