@@ -2,6 +2,7 @@ package org.monostudio.jpa.repositories;
 
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.jpa.Repository;
@@ -51,4 +52,6 @@ public interface RefundRetryQueueRepository
      * Count pending retries.
      */
     long countByStatus(RefundStatus status);
+
+    List<RefundRetryQueue> findAllByOrderByNextRetryAtDesc(Pageable pageable);
 }
