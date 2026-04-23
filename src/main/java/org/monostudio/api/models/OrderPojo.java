@@ -40,6 +40,7 @@ public class OrderPojo {
     private String discountCode;
     private int discountValue;
     private String status;
+    private String fulfillmentStatus;
     private String paymentStatus;
     private String billingType;
     @NotBlank

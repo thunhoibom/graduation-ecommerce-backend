@@ -25,8 +25,8 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.TreeMap;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service("MOMO")
@@ -34,7 +34,6 @@ public class MomoPaymentServiceImpl implements PaymentService {
     private static final Logger logger = LoggerFactory.getLogger(MomoPaymentServiceImpl.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
-    private static final String REQUEST_TYPE_CAPTURE_WALLET = "captureWallet";
     private static final String LANG_VI = "vi";
 
     private final MomoConfig config;
@@ -52,11 +51,15 @@ public class MomoPaymentServiceImpl implements PaymentService {
         validateRequiredConfig(config.getSecretKey(), "monostudio.payment.momo.secret-key");
         validateRequiredConfig(config.getReturnUrl(), "monostudio.payment.momo.return-url");
         validateRequiredConfig(config.getNotifyUrl(), "monostudio.payment.momo.notify-url");
+        validateRequiredConfig(config.getRequestType(), "monostudio.payment.momo.request-type");
 
         String orderId = StringUtils.isNotBlank(transaction.getToken())
-            ? transaction.getToken()
+            ? sanitizeAlphaNumeric(transaction.getToken())
             : buildOrderId(transaction);
-        String requestId = UUID.randomUUID().toString();
+        if (StringUtils.isBlank(orderId)) {
+            orderId = buildOrderId(transaction);
+        }
+        String requestId = buildRequestId();
         String amount = String.valueOf(transaction.getTotalValue());
         String orderInfo = "Thanh toan don hang #" + transaction.getBuyOrder();
 
@@ -69,7 +72,7 @@ public class MomoPaymentServiceImpl implements PaymentService {
             + "&partnerCode=" + config.getPartnerCode()
             + "&redirectUrl=" + config.getReturnUrl()
             + "&requestId=" + requestId
-            + "&requestType=" + REQUEST_TYPE_CAPTURE_WALLET;
+            + "&requestType=" + config.getRequestType();
 
         String signature = hmacSHA256(config.getSecretKey(), rawSignature);
 
@@ -84,7 +87,7 @@ public class MomoPaymentServiceImpl implements PaymentService {
         payload.put("redirectUrl", config.getReturnUrl());
         payload.put("ipnUrl", config.getNotifyUrl());
         payload.put("lang", LANG_VI);
-        payload.put("requestType", REQUEST_TYPE_CAPTURE_WALLET);
+        payload.put("requestType", config.getRequestType());
         payload.put("autoCapture", true);
         payload.put("extraData", "");
         payload.put("signature", signature);
@@ -119,7 +122,7 @@ public class MomoPaymentServiceImpl implements PaymentService {
         validateRequiredConfig(config.getAccessKey(), "monostudio.payment.momo.access-key");
         validateRequiredConfig(config.getSecretKey(), "monostudio.payment.momo.secret-key");
 
-        String requestId = UUID.randomUUID().toString();
+        String requestId = buildRequestId();
         String rawSignature = "accessKey=" + config.getAccessKey()
             + "&orderId=" + transactionToken
             + "&partnerCode=" + config.getPartnerCode()
@@ -203,7 +206,8 @@ public class MomoPaymentServiceImpl implements PaymentService {
 
             HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new PaymentServiceException("MOMO API returned HTTP " + response.statusCode());
+                throw new PaymentServiceException("MOMO API returned HTTP " + response.statusCode()
+                    + " body=" + StringUtils.abbreviate(response.body(), 500));
             }
             return OBJECT_MAPPER.readTree(response.body());
         } catch (PaymentServiceException e) {
@@ -238,8 +242,22 @@ public class MomoPaymentServiceImpl implements PaymentService {
     private String buildOrderId(OrderPojo transaction) {
         String buyOrder = transaction.getBuyOrder() != null
             ? String.valueOf(transaction.getBuyOrder())
-            : "NA";
-        return "MOMO-" + buyOrder + "-" + System.currentTimeMillis();
+            : String.valueOf(System.currentTimeMillis());
+        String token = "MOMO" + buyOrder + System.currentTimeMillis();
+        return sanitizeAlphaNumeric(token);
+    }
+
+    private String buildRequestId() {
+        long now = System.currentTimeMillis();
+        int random = ThreadLocalRandom.current().nextInt(100000, 999999);
+        return "REQ" + now + random;
+    }
+
+    private String sanitizeAlphaNumeric(String source) {
+        if (source == null) {
+            return "";
+        }
+        return source.replaceAll("[^0-9a-zA-Z]", "");
     }
 
     private String buildMomoCallbackRawSignature(Map<String, String> transactionData) {

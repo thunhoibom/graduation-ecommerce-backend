@@ -2,6 +2,7 @@ package org.monostudio.api.controllers;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.monostudio.api.models.ShipmentTrackingWebhookPayload;
 import org.monostudio.api.services.ShipmentTrackingService;
 import org.monostudio.config.WebhookProperties;
@@ -25,13 +26,14 @@ public class WebhookShippingController {
 
     @PostMapping("/tracking")
     public ResponseEntity<String> receiveTracking(
-            @RequestHeader("Authorization") String authHeader,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Webhook-Token", required = false) String webhookToken,
             @RequestBody ShipmentTrackingWebhookPayload payload) {
         
         log.info("Received shipping webhook: {}", payload);
 
         // 1. Basic Auth Validation
-        if (authHeader == null || !authHeader.equals("Bearer " + webhookProperties.getSecret())) {
+        if (!isAuthorized(authHeader, webhookToken)) {
             log.warn("Unauthorized shipping webhook attempt with token: {}", authHeader);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid secret token");
         }
@@ -46,5 +48,17 @@ public class WebhookShippingController {
             log.error("Error processing shipping webhook", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal error");
         }
+    }
+
+    private boolean isAuthorized(String authHeader, String webhookToken) {
+        String defaultSecret = webhookProperties.getSecret();
+        String ghnSecret = StringUtils.defaultIfBlank(webhookProperties.getGhnSecret(), defaultSecret);
+        if (StringUtils.isBlank(ghnSecret)) {
+            return false;
+        }
+        if (StringUtils.isNotBlank(authHeader) && authHeader.equals("Bearer " + ghnSecret)) {
+            return true;
+        }
+        return StringUtils.isNotBlank(webhookToken) && webhookToken.equals(ghnSecret);
     }
 }

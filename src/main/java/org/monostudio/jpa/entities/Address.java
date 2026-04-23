@@ -69,6 +69,10 @@ public class Address
     private Double latitude;
     @Column(name = "longitude")
     private Double longitude;
+    @Column(name = "address_district_id")
+    private Integer districtId;
+    @Column(name = "address_ward_code")
+    private String wardCode;
 
     public Address(Address source) {
         this.id = source.id;
@@ -80,5 +84,7 @@ public class Address
         this.notes = source.notes;
         this.latitude = source.latitude;
         this.longitude = source.longitude;
+        this.districtId = source.districtId;
+        this.wardCode = source.wardCode;
     }
 }

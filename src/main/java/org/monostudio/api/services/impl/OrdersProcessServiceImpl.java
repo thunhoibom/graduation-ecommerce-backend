@@ -16,16 +16,15 @@ import org.monostudio.api.services.DiscountService;
 import org.monostudio.api.services.LoyaltyService;
 import org.monostudio.api.services.OrdersProcessService;
 import org.monostudio.api.services.StockReservationService;
+import org.monostudio.api.services.ShipmentOrchestratorService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Order;
 import org.monostudio.jpa.entities.OrderDetail;
-import org.monostudio.jpa.entities.OrderStatus;
 import org.monostudio.jpa.entities.StockAdjustment;
 import org.monostudio.jpa.repositories.CartItemsRepository;
 import org.monostudio.jpa.repositories.CartSessionsRepository;
 import org.monostudio.jpa.repositories.OrdersRepository;
 import org.monostudio.jpa.repositories.OrderDetailsRepository;
-import org.monostudio.jpa.repositories.OrderStatusesRepository;
 import org.monostudio.jpa.services.conversion.ProductsConverterService;
 import org.monostudio.jpa.services.conversion.OrdersConverterService;
 import org.monostudio.jpa.services.crud.OrdersCrudService;
@@ -42,18 +41,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.monostudio.config.Constants.ORDER_STATUS_COMPLETED;
-import static org.monostudio.config.Constants.ORDER_STATUS_DELIVERY_CANCELLED;
-import static org.monostudio.config.Constants.ORDER_STATUS_DELIVERY_FAILED;
-import static org.monostudio.config.Constants.ORDER_STATUS_DELIVERY_ON_ROUTE;
-import static org.monostudio.config.Constants.ORDER_STATUS_PAID_CONFIRMED;
-import static org.monostudio.config.Constants.ORDER_STATUS_PAID_UNCONFIRMED;
-import static org.monostudio.config.Constants.ORDER_STATUS_PAYMENT_CANCELLED;
-import static org.monostudio.config.Constants.ORDER_STATUS_PAYMENT_FAILED;
-import static org.monostudio.config.Constants.ORDER_STATUS_PAYMENT_STARTED;
-import static org.monostudio.config.Constants.ORDER_STATUS_PENDING;
-import static org.monostudio.config.Constants.ORDER_STATUS_REJECTED;
-import static org.monostudio.config.Constants.ORDER_STATUS_RETURNED;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_COMPLETED;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_CONFIRMED;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_DELIVERY_CANCELLED;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_DELIVERY_FAILED;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_PENDING;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_REJECTED;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_RETURNED;
+import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_PAID;
+import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_PAYMENT_CANCELLED;
+import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_PAYMENT_FAILED;
+import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_PAYMENT_STARTED;
+import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_REFUNDED;
+import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_UNPAID;
 import static org.monostudio.config.Constants.LOYALTY_EVENT_REVERSE_REJECTED;
 import static org.monostudio.config.Constants.LOYALTY_EVENT_REVERSE_RETURNED;
 import org.monostudio.config.cache.CacheNames;
@@ -69,7 +70,6 @@ public class OrdersProcessServiceImpl
     private final OrdersCrudService crudService;
     private final OrdersRepository ordersRepository;
     private final OrderDetailsRepository orderDetailsRepository;
-    private final OrderStatusesRepository orderStatusesRepository;
     private final OrdersConverterService converterService;
     private final ProductsConverterService productConverterService;
     private final KafkaMailProducer kafkaMailProducer;
@@ -81,12 +81,12 @@ public class OrdersProcessServiceImpl
     private final LoyaltyService loyaltyService;
     private final CartSessionsRepository cartSessionsRepository;
     private final CartItemsRepository cartItemsRepository;
+    private final ShipmentOrchestratorService shipmentOrchestratorService;
 
     public OrdersProcessServiceImpl(
         OrdersCrudService crudService,
         OrdersRepository ordersRepository,
         OrderDetailsRepository orderDetailsRepository,
-        OrderStatusesRepository orderStatusesRepository,
         OrdersConverterService converterService,
         ProductsConverterService productConverterService,
         KafkaMailProducer kafkaMailProducer,
@@ -97,12 +97,12 @@ public class OrdersProcessServiceImpl
         @Autowired(required = false) RefundRetryService refundRetryService,
         LoyaltyService loyaltyService,
         CartSessionsRepository cartSessionsRepository,
-        CartItemsRepository cartItemsRepository
+        CartItemsRepository cartItemsRepository,
+        @Autowired(required = false) ShipmentOrchestratorService shipmentOrchestratorService
     ) {
         this.crudService = crudService;
         this.ordersRepository = ordersRepository;
         this.orderDetailsRepository = orderDetailsRepository;
-        this.orderStatusesRepository = orderStatusesRepository;
         this.converterService = converterService;
         this.productConverterService = productConverterService;
         this.kafkaMailProducer = kafkaMailProducer;
@@ -114,6 +114,7 @@ public class OrdersProcessServiceImpl
         this.loyaltyService = loyaltyService;
         this.cartSessionsRepository = cartSessionsRepository;
         this.cartItemsRepository = cartItemsRepository;
+        this.shipmentOrchestratorService = shipmentOrchestratorService;
     }
 
     private void sendClientEmail(OrderPojo order) {
@@ -137,23 +138,22 @@ public class OrdersProcessServiceImpl
     public OrderPojo markAsStarted(OrderPojo sell) throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
-        if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PENDING)) {
+        if (!ORDER_FULFILLMENT_STATUS_PENDING.equals(existingOrder.getFulfillmentStatus())
+            || !ORDER_PAYMENT_STATUS_UNPAID.equals(existingOrder.getPaymentStatus())) {
             // P0.5: Reject if order is not in PENDING — cannot restart payment for an already-started order.
             throw new BadInputException(
                 "Cannot start payment for order " + existingOrder.getId()
-                    + " — current status is '" + existingOrder.getStatus().getName()
-                    + "', expected '" + ORDER_STATUS_PENDING + "'.");
+                    + " — current fulfillment/payment is '"
+                    + existingOrder.getFulfillmentStatus() + "/" + existingOrder.getPaymentStatus()
+                    + "', expected '" + ORDER_FULFILLMENT_STATUS_PENDING + "/" + ORDER_PAYMENT_STATUS_UNPAID + "'.");
         }
 
-        Optional<OrderStatus> startedStatus = orderStatusesRepository.findByName(ORDER_STATUS_PAYMENT_STARTED);
-        if (startedStatus.isEmpty()) {
-            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + ORDER_STATUS_PAYMENT_STARTED + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
-        }
-        ordersRepository.setStatus(existingOrder.getId(), startedStatus.get());
+        ordersRepository.setPaymentStatus(existingOrder.getId(), ORDER_PAYMENT_STATUS_PAYMENT_STARTED);
         ordersRepository.setTransactionToken(existingOrder.getId(), sell.getToken());
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
-        target.setStatus(ORDER_STATUS_PAYMENT_STARTED);
+        target.setStatus(target.getFulfillmentStatus());
+        target.setPaymentStatus(ORDER_PAYMENT_STATUS_PAYMENT_STARTED);
         kafkaOrderProducer.publishOrderPaymentStarted(existingOrder.getId(), existingOrder.getCartSessionToken());
         sendClientEmail(target);
         return target;
@@ -170,25 +170,22 @@ public class OrdersProcessServiceImpl
     public OrderPojo markAsAborted(OrderPojo sell) throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
-        if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PAYMENT_STARTED)) {
+        if (!ORDER_PAYMENT_STATUS_PAYMENT_STARTED.equals(existingOrder.getPaymentStatus())) {
             // P0.5: If order is not in PAYMENT_STARTED, it has already been processed.
             // This can happen when the gateway retries a callback after the first succeeded.
             // The order may already be PAID, CANCELLED, or FAILED — do not reprocess.
             throw new BadInputException(
                 "Cannot abort order " + existingOrder.getId()
-                    + " — current status is '" + existingOrder.getStatus().getName()
-                    + "', expected '" + ORDER_STATUS_PAYMENT_STARTED + "'. "
+                    + " — current payment status is '" + existingOrder.getPaymentStatus()
+                    + "', expected '" + ORDER_PAYMENT_STATUS_PAYMENT_STARTED + "'. "
                     + "Possible duplicate callback — order may have already been processed.");
         }
 
-        Optional<OrderStatus> abortedStatus = orderStatusesRepository.findByName(ORDER_STATUS_PAYMENT_CANCELLED);
-        if (abortedStatus.isEmpty()) {
-            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + ORDER_STATUS_PAYMENT_CANCELLED + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
-        }
-        ordersRepository.setStatus(existingOrder.getId(), abortedStatus.get());
+        ordersRepository.setPaymentStatus(existingOrder.getId(), ORDER_PAYMENT_STATUS_PAYMENT_CANCELLED);
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
-        target.setStatus(ORDER_STATUS_PAYMENT_CANCELLED);
+        target.setStatus(target.getFulfillmentStatus());
+        target.setPaymentStatus(ORDER_PAYMENT_STATUS_PAYMENT_CANCELLED);
 
         // Release stock reservations since payment was cancelled
         if (existingOrder.getCartSessionToken() != null) {
@@ -211,22 +208,19 @@ public class OrdersProcessServiceImpl
     public OrderPojo markAsFailed(OrderPojo sell) throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
-        if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PAYMENT_STARTED)) {
+        if (!ORDER_PAYMENT_STATUS_PAYMENT_STARTED.equals(existingOrder.getPaymentStatus())) {
             throw new BadInputException(
                 "Cannot mark order " + existingOrder.getId() + " as failed"
-                    + " — current status is '" + existingOrder.getStatus().getName()
-                    + "', expected '" + ORDER_STATUS_PAYMENT_STARTED + "'. "
+                    + " — current payment status is '" + existingOrder.getPaymentStatus()
+                    + "', expected '" + ORDER_PAYMENT_STATUS_PAYMENT_STARTED + "'. "
                     + "Possible duplicate callback.");
         }
 
-        Optional<OrderStatus> failedStatus = orderStatusesRepository.findByName(ORDER_STATUS_PAYMENT_FAILED);
-        if (failedStatus.isEmpty()) {
-            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + ORDER_STATUS_PAYMENT_FAILED + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
-        }
-        ordersRepository.setStatus(existingOrder.getId(), failedStatus.get());
+        ordersRepository.setPaymentStatus(existingOrder.getId(), ORDER_PAYMENT_STATUS_PAYMENT_FAILED);
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
-        target.setStatus(ORDER_STATUS_PAYMENT_FAILED);
+        target.setStatus(target.getFulfillmentStatus());
+        target.setPaymentStatus(ORDER_PAYMENT_STATUS_PAYMENT_FAILED);
 
         // Release stock reservations since payment failed
         if (existingOrder.getCartSessionToken() != null) {
@@ -248,30 +242,26 @@ public class OrdersProcessServiceImpl
     })
     public OrderPojo markAsPaid(OrderPojo sell) throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
-        String currentStatus = existingOrder.getStatus().getName();
+        String currentPaymentStatus = existingOrder.getPaymentStatus();
         String paymentTypeName = existingOrder.getPaymentType() != null ? existingOrder.getPaymentType().getName() : null;
         boolean isCodPendingTransition =
-            ORDER_STATUS_PENDING.equals(currentStatus) && "COD".equalsIgnoreCase(paymentTypeName);
+            ORDER_PAYMENT_STATUS_UNPAID.equals(currentPaymentStatus) && "COD".equalsIgnoreCase(paymentTypeName);
 
-        if (!ORDER_STATUS_PAYMENT_STARTED.equals(currentStatus) && !isCodPendingTransition) {
+        if (!ORDER_PAYMENT_STATUS_PAYMENT_STARTED.equals(currentPaymentStatus) && !isCodPendingTransition) {
             // P0.5: Reject if order is not in PAYMENT_STARTED.
             // This guards against race conditions and duplicate webhook callbacks.
             // Note: PaymentCallbackLog in CheckoutServiceImpl is the primary defense;
             // this is the secondary defense at the service layer.
             throw new BadInputException(
                 "Cannot mark order " + existingOrder.getId() + " as paid"
-                    + " — current status is '" + existingOrder.getStatus().getName()
-                    + "', expected '" + ORDER_STATUS_PAYMENT_STARTED + "'"
-                    + " (or '" + ORDER_STATUS_PENDING + "' for COD). "
+                    + " — current payment status is '" + existingOrder.getPaymentStatus()
+                    + "', expected '" + ORDER_PAYMENT_STATUS_PAYMENT_STARTED + "'"
+                    + " (or '" + ORDER_PAYMENT_STATUS_UNPAID + "' for COD). "
                     + "This may be a duplicate payment callback. "
                     + "If the order should already be PAID, no action is needed.");
         }
 
-        Optional<OrderStatus> paidStatus = orderStatusesRepository.findByName(ORDER_STATUS_PAID_UNCONFIRMED);
-        if (paidStatus.isEmpty()) {
-            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + ORDER_STATUS_PAID_UNCONFIRMED + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
-        }
-        ordersRepository.setStatus(existingOrder.getId(), paidStatus.get());
+        ordersRepository.setPaymentStatus(existingOrder.getId(), ORDER_PAYMENT_STATUS_PAID);
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
 
@@ -286,7 +276,8 @@ public class OrdersProcessServiceImpl
                 .build();
             pojoDetails.add(orderDetailPojo);
         }
-        target.setStatus(ORDER_STATUS_PAID_UNCONFIRMED);
+        target.setStatus(target.getFulfillmentStatus());
+        target.setPaymentStatus(ORDER_PAYMENT_STATUS_PAID);
         target.setDetails(pojoDetails);
 
         // Confirm stock reservations per-variant.
@@ -345,15 +336,12 @@ public class OrdersProcessServiceImpl
         throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
-        if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PAID_UNCONFIRMED)) {
+        if (!ORDER_FULFILLMENT_STATUS_PENDING.equals(existingOrder.getFulfillmentStatus())
+            || !ORDER_PAYMENT_STATUS_PAID.equals(existingOrder.getPaymentStatus())) {
             throw new BadInputException(THE_TRANSACTION_IS_NOT_IN_A_VALID_STATE_FOR_THIS_OPERATION);
         }
 
-        Optional<OrderStatus> confirmedStatus = orderStatusesRepository.findByName(ORDER_STATUS_PAID_CONFIRMED);
-        if (confirmedStatus.isEmpty()) {
-            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + ORDER_STATUS_PAID_CONFIRMED + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
-        }
-        ordersRepository.setStatus(existingOrder.getId(), confirmedStatus.get());
+        ordersRepository.setFulfillmentStatus(existingOrder.getId(), ORDER_FULFILLMENT_STATUS_CONFIRMED);
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
 
@@ -368,7 +356,12 @@ public class OrdersProcessServiceImpl
             pojoDetails.add(orderDetailPojo);
         }
         target.setDetails(pojoDetails);
-        target.setStatus(ORDER_STATUS_PAID_CONFIRMED);
+        target.setStatus(ORDER_FULFILLMENT_STATUS_CONFIRMED);
+        target.setFulfillmentStatus(ORDER_FULFILLMENT_STATUS_CONFIRMED);
+
+        if (shipmentOrchestratorService != null) {
+            shipmentOrchestratorService.requestShipmentCreation(existingOrder.getId());
+        }
 
         sendClientEmail(target);
         kafkaOrderProducer.publishOrderConfirmed(existingOrder.getId());
@@ -388,19 +381,16 @@ public class OrdersProcessServiceImpl
         throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
-        if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_PAID_UNCONFIRMED)) {
+        if (!ORDER_FULFILLMENT_STATUS_PENDING.equals(existingOrder.getFulfillmentStatus())
+            || !ORDER_PAYMENT_STATUS_PAID.equals(existingOrder.getPaymentStatus())) {
             throw new BadInputException(THE_TRANSACTION_IS_NOT_IN_A_VALID_STATE_FOR_THIS_OPERATION);
-        }
-
-        Optional<OrderStatus> rejectedStatus = orderStatusesRepository.findByName(ORDER_STATUS_REJECTED);
-        if (rejectedStatus.isEmpty()) {
-            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + ORDER_STATUS_REJECTED + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
         }
 
         // P2: Fetch lazy-loaded fields BEFORE status update clears the persistence context
         String paymentTypeName = existingOrder.getPaymentType() != null ? existingOrder.getPaymentType().getName() : null;
 
-        ordersRepository.setStatus(existingOrder.getId(), rejectedStatus.get());
+        ordersRepository.setFulfillmentStatus(existingOrder.getId(), ORDER_FULFILLMENT_STATUS_REJECTED);
+        ordersRepository.setPaymentStatus(existingOrder.getId(), ORDER_PAYMENT_STATUS_REFUNDED);
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
 
@@ -415,7 +405,9 @@ public class OrdersProcessServiceImpl
             pojoDetails.add(orderDetailPojo);
         }
         target.setDetails(pojoDetails);
-        target.setStatus(ORDER_STATUS_REJECTED);
+        target.setStatus(ORDER_FULFILLMENT_STATUS_REJECTED);
+        target.setFulfillmentStatus(ORDER_FULFILLMENT_STATUS_REJECTED);
+        target.setPaymentStatus(ORDER_PAYMENT_STATUS_REFUNDED);
 
         // Restore stockCurrent: the order was rejected after payment, so the stock that was
         // deducted at markAsPaid must be returned to available inventory.
@@ -486,15 +478,11 @@ public class OrdersProcessServiceImpl
         throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
 
-        if (!existingOrder.getStatus().getName().equals(ORDER_STATUS_DELIVERY_ON_ROUTE)) {
+        if (!ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE.equals(existingOrder.getFulfillmentStatus())) {
             throw new BadInputException(THE_TRANSACTION_IS_NOT_IN_A_VALID_STATE_FOR_THIS_OPERATION);
         }
 
-        Optional<OrderStatus> completedStatus = orderStatusesRepository.findByName(ORDER_STATUS_COMPLETED);
-        if (completedStatus.isEmpty()) {
-            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + ORDER_STATUS_COMPLETED + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
-        }
-        ordersRepository.setStatus(existingOrder.getId(), completedStatus.get());
+        ordersRepository.setFulfillmentStatus(existingOrder.getId(), ORDER_FULFILLMENT_STATUS_COMPLETED);
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
 
@@ -509,7 +497,8 @@ public class OrdersProcessServiceImpl
             pojoDetails.add(orderDetailPojo);
         }
         target.setDetails(pojoDetails);
-        target.setStatus(ORDER_STATUS_COMPLETED);
+        target.setStatus(ORDER_FULFILLMENT_STATUS_COMPLETED);
+        target.setFulfillmentStatus(ORDER_FULFILLMENT_STATUS_COMPLETED);
 
         sendClientEmail(target);
         kafkaOrderProducer.publishOrderCompleted(existingOrder.getId());
@@ -529,8 +518,8 @@ public class OrdersProcessServiceImpl
         throws BadInputException, EntityNotFoundException {
         return moveStatus(
             sell,
-            ORDER_STATUS_PAID_CONFIRMED,
-            ORDER_STATUS_DELIVERY_ON_ROUTE
+            ORDER_FULFILLMENT_STATUS_CONFIRMED,
+            ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE
         );
     }
 
@@ -546,8 +535,8 @@ public class OrdersProcessServiceImpl
         throws BadInputException, EntityNotFoundException {
         return moveStatus(
             sell,
-            ORDER_STATUS_DELIVERY_ON_ROUTE,
-            ORDER_STATUS_DELIVERY_FAILED
+            ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE,
+            ORDER_FULFILLMENT_STATUS_DELIVERY_FAILED
         );
     }
 
@@ -563,8 +552,8 @@ public class OrdersProcessServiceImpl
         throws BadInputException, EntityNotFoundException {
         return moveStatus(
             sell,
-            ORDER_STATUS_DELIVERY_ON_ROUTE,
-            ORDER_STATUS_DELIVERY_CANCELLED
+            ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE,
+            ORDER_FULFILLMENT_STATUS_DELIVERY_CANCELLED
         );
     }
 
@@ -579,24 +568,21 @@ public class OrdersProcessServiceImpl
     public OrderPojo markAsReturned(OrderPojo sell)
         throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
-        String currentStatus = existingOrder.getStatus().getName();
+        String currentStatus = existingOrder.getFulfillmentStatus();
         boolean canReturn =
-            ORDER_STATUS_DELIVERY_FAILED.equals(currentStatus)
-                || ORDER_STATUS_DELIVERY_CANCELLED.equals(currentStatus)
-                || ORDER_STATUS_COMPLETED.equals(currentStatus);
+            ORDER_FULFILLMENT_STATUS_DELIVERY_FAILED.equals(currentStatus)
+                || ORDER_FULFILLMENT_STATUS_DELIVERY_CANCELLED.equals(currentStatus)
+                || ORDER_FULFILLMENT_STATUS_COMPLETED.equals(currentStatus);
         if (!canReturn) {
             throw new BadInputException(
                 "Cannot mark order " + existingOrder.getId() + " as returned"
                     + " — current status is '" + currentStatus + "'.");
         }
 
-        Optional<OrderStatus> returnedStatus = orderStatusesRepository.findByName(ORDER_STATUS_RETURNED);
-        if (returnedStatus.isEmpty()) {
-            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + ORDER_STATUS_RETURNED + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
-        }
-        ordersRepository.setStatus(existingOrder.getId(), returnedStatus.get());
+        ordersRepository.setFulfillmentStatus(existingOrder.getId(), ORDER_FULFILLMENT_STATUS_RETURNED);
         OrderPojo target = this.convertOrThrowException(existingOrder);
-        target.setStatus(ORDER_STATUS_RETURNED);
+        target.setStatus(ORDER_FULFILLMENT_STATUS_RETURNED);
+        target.setFulfillmentStatus(ORDER_FULFILLMENT_STATUS_RETURNED);
         try {
             loyaltyService.reverseForOrder(existingOrder.getId(), LOYALTY_EVENT_REVERSE_RETURNED);
         } catch (RuntimeException e) {
@@ -619,8 +605,8 @@ public class OrdersProcessServiceImpl
         throws BadInputException, EntityNotFoundException {
         Order existingOrder = fetchExistingOrThrowException(sell);
 
-        String currentStatus = existingOrder.getStatus().getName();
-        if (!ORDER_STATUS_DELIVERY_ON_ROUTE.equals(currentStatus)) {
+        String currentStatus = existingOrder.getFulfillmentStatus();
+        if (!ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE.equals(currentStatus)) {
             throw new BadInputException(
                 "Cannot recall order in status '" + currentStatus + "'");
         }
@@ -639,8 +625,8 @@ public class OrdersProcessServiceImpl
     })
     public int expireStalePaymentSessions() {
         Instant cutoff = Instant.now().minus(30, ChronoUnit.MINUTES);
-        List<Order> stale = ordersRepository.findByStatusNameAndDateBefore(
-            ORDER_STATUS_PAYMENT_STARTED, cutoff);
+        List<Order> stale = ordersRepository.findByPaymentStatusAndDateBefore(
+            ORDER_PAYMENT_STATUS_PAYMENT_STARTED, cutoff);
 
         int count = 0;
         for (Order order : stale) {
@@ -659,21 +645,18 @@ public class OrdersProcessServiceImpl
     private OrderPojo moveStatus(OrderPojo sell, String fromStatus, String toStatus)
         throws BadInputException, EntityNotFoundException {
         Order existingOrder = this.fetchExistingOrThrowException(sell);
-        if (!existingOrder.getStatus().getName().equals(fromStatus)) {
+        if (!existingOrder.getFulfillmentStatus().equals(fromStatus)) {
             throw new BadInputException(
                 "Cannot move order " + existingOrder.getId()
                     + " to '" + toStatus + "'"
-                    + " — current status is '" + existingOrder.getStatus().getName()
+                    + " — current status is '" + existingOrder.getFulfillmentStatus()
                     + "', expected '" + fromStatus + "'.");
         }
 
-        Optional<OrderStatus> status = orderStatusesRepository.findByName(toStatus);
-        if (status.isEmpty()) {
-            throw new IllegalStateException(NO_STATUS_MATCHES_THE + " '" + toStatus + "' " + NAME_IS_THE_DATABASE_EMPTY_OR_CORRUPT);
-        }
-        ordersRepository.setStatus(existingOrder.getId(), status.get());
+        ordersRepository.setFulfillmentStatus(existingOrder.getId(), toStatus);
         OrderPojo target = this.convertOrThrowException(existingOrder);
         target.setStatus(toStatus);
+        target.setFulfillmentStatus(toStatus);
         sendClientEmail(target);
         sendOwnerEmail(target);
         return target;

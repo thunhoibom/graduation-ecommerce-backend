@@ -33,4 +33,7 @@ public class MomoConfig {
 
     @Value("${monostudio.payment.momo.browser-redirection-url:}")
     private String browserRedirectionUrl;
+
+    @Value("${monostudio.payment.momo.request-type:payWithMethod}")
+    private String requestType;
 }

@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.monostudio.config.Constants.ORDER_STATUS_PENDING;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_PENDING;
 
 @Service
 public class AdminNotificationServiceImpl implements AdminNotificationService {
@@ -98,7 +98,7 @@ public class AdminNotificationServiceImpl implements AdminNotificationService {
             .orderCode(String.valueOf(orderPojo.getBuyOrder() != null ? orderPojo.getBuyOrder() : orderId))
             .createdAt(createdAt)
             .totalAmount(orderPojo.getTotalValue())
-            .status(orderPojo.getStatus() != null ? orderPojo.getStatus() : ORDER_STATUS_PENDING)
+            .status(orderPojo.getStatus() != null ? orderPojo.getStatus() : ORDER_FULFILLMENT_STATUS_PENDING)
             .build();
     }
 

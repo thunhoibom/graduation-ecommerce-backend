@@ -27,10 +27,12 @@ public class CacheKeyBuilder {
         return builder.toString();
     }
 
-    public String shipping(Integer subtotal, Double latitude, Double longitude) {
+    public String shipping(Integer subtotal, Double latitude, Double longitude, Integer toDistrictId, String toWardCode) {
         return "subtotal=" + Objects.toString(subtotal, "null")
             + "|lat=" + normalizeCoordinate(latitude)
-            + "|lon=" + normalizeCoordinate(longitude);
+            + "|lon=" + normalizeCoordinate(longitude)
+            + "|district=" + Objects.toString(toDistrictId, "null")
+            + "|ward=" + Objects.toString(toWardCode, "null");
     }
 
     public String discountValidation(String code, int subtotal) {

@@ -30,7 +30,8 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.monostudio.config.Constants.BILLING_TYPE_ENTERPRISE;
-import static org.monostudio.config.Constants.ORDER_STATUS_PENDING;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_PENDING;
+import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_UNPAID;
 
 @Transactional
 @Service
@@ -48,7 +49,6 @@ public class OrdersConverterServiceImpl
     private final ShippingMethodsRepository shippingMethodsRepository;
     private final AddressesRepository addressesRepository;
     private final PaymentTypesRepository paymentTypesRepository;
-    private final OrderStatusesRepository orderStatusesRepository;
     private final AddressesConverterService addressesConverterService;
     private final ProductVariantsConverterService productVariantsConverterService;
     private final UsersRepository usersRepository;
@@ -70,7 +70,6 @@ public class OrdersConverterServiceImpl
         ShippingMethodsRepository shippingMethodsRepository,
         AddressesRepository addressesRepository,
         PaymentTypesRepository paymentTypesRepository,
-        OrderStatusesRepository orderStatusesRepository,
         AddressesConverterService addressesConverterService,
         ProductVariantsConverterService productVariantsConverterService,
         UsersRepository usersRepository,
@@ -88,7 +87,6 @@ public class OrdersConverterServiceImpl
         this.shippingMethodsRepository = shippingMethodsRepository;
         this.addressesRepository = addressesRepository;
         this.paymentTypesRepository = paymentTypesRepository;
-        this.orderStatusesRepository = orderStatusesRepository;
         this.addressesConverterService = addressesConverterService;
         this.productVariantsConverterService = productVariantsConverterService;
         this.usersRepository = usersRepository;
@@ -116,23 +114,11 @@ public class OrdersConverterServiceImpl
         PersonPojo customer = customersConverterService.convertToPojo(source.getCustomer());
         target.setCustomer(customer);
 
-        target.setStatus(source.getStatus().getName());
+        target.setStatus(source.getFulfillmentStatus());
+        target.setFulfillmentStatus(source.getFulfillmentStatus());
+        target.setPaymentStatus(source.getPaymentStatus());
         target.setPaymentType(source.getPaymentType().getName());
         target.setBillingType(source.getBillingType().getName());
-
-        // Derive payment status
-        String statusName = source.getStatus().getName();
-        String paymentTypeName = source.getPaymentType().getName();
-        boolean isCompleted = statusName.equals(org.monostudio.config.Constants.ORDER_STATUS_COMPLETED);
-        boolean isPaidStatus = statusName.equals(org.monostudio.config.Constants.ORDER_STATUS_PAID_UNCONFIRMED)
-            || statusName.equals(org.monostudio.config.Constants.ORDER_STATUS_PAID_CONFIRMED);
-        boolean isOnlinePayment = !paymentTypeName.equalsIgnoreCase("COD");
-
-        if (isCompleted || (isPaidStatus && isOnlinePayment)) {
-            target.setPaymentStatus("PAID");
-        } else {
-            target.setPaymentStatus("UNPAID");
-        }
 
         if (source.getBillingAddress() != null) {
             target.setBillingAddress(addressesConverterService.convertToPojo(source.getBillingAddress()));
@@ -187,8 +173,8 @@ public class OrdersConverterServiceImpl
         if (model.getDate()!=null) {
             target.setDate(model.getDate());
         }
-        orderStatusesRepository.findByName(ORDER_STATUS_PENDING)
-            .ifPresent(target::setStatus);
+        target.setFulfillmentStatus(ORDER_FULFILLMENT_STATUS_PENDING);
+        target.setPaymentStatus(ORDER_PAYMENT_STATUS_UNPAID);
         if (model.getDiscountCode()!=null) {
             target.setDiscountCode(model.getDiscountCode());
             target.setDiscountValue(model.getDiscountValue());

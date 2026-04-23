@@ -70,8 +70,10 @@ public class OrdersCrudServiceImpl
 
     @Override
     protected Order flushPartialChanges(Map<String, Object> changes, Order existingEntity) throws BadInputException {
-        Integer statusCode = existingEntity.getStatus().getCode();
-        if ((statusCode >= 3 || statusCode < 0) && !apiProperties.isAbleToEditOrdersAfterBeingProcessed()) {
+        boolean canEdit =
+            "PENDING".equals(existingEntity.getFulfillmentStatus())
+                && "UNPAID".equals(existingEntity.getPaymentStatus());
+        if (!canEdit && !apiProperties.isAbleToEditOrdersAfterBeingProcessed()) {
             throw new BadInputException("The requested transaction cannot be modified");
         }
         return super.flushPartialChanges(changes, existingEntity);

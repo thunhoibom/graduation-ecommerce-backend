@@ -12,13 +12,15 @@ import org.monostudio.jpa.repositories.OrdersRepository;
 import org.monostudio.jpa.repositories.ShipmentTrackingRepository;
 import org.monostudio.search.models.ShipmentTrackingDocument;
 import org.monostudio.search.repositories.ShipmentTrackingSearchRepository;
+import org.monostudio.shipping.GhnStatusMapper;
+import org.monostudio.shipping.GhnStatusMapper.WorkflowAction;
 import org.monostudio.shipping.kafka.KafkaShippingProducer;
 import org.monostudio.shipping.kafka.ShipmentTrackingEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Locale;
+import org.apache.commons.lang3.StringUtils;
 
 @Service
 @Slf4j
@@ -30,18 +32,32 @@ public class ShipmentTrackingServiceImpl implements ShipmentTrackingService {
     private final KafkaShippingProducer kafkaShippingProducer;
     private final OrdersProcessService ordersProcessService;
     private final ShipmentTrackingSearchRepository searchRepository;
+    private final GhnStatusMapper ghnStatusMapper;
 
     @Override
     @Transactional
     public ShipmentTracking record(ShipmentTrackingWebhookPayload payload) {
         Order order = ordersRepository.findById(payload.getOrder_id())
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + payload.getOrder_id()));
+        if (trackingRepository.existsByOrderIdAndTrackingNumberAndStatusAndEventTime(
+            payload.getOrder_id(),
+            payload.getTracking_number(),
+            payload.getStatus(),
+            payload.getEvent_time()
+        )) {
+            log.info("Duplicate shipping webhook ignored for order={} tracking={} status={}",
+                payload.getOrder_id(), payload.getTracking_number(), payload.getStatus());
+            return trackingRepository.findByTrackingNumberOrderByEventTimeDesc(payload.getTracking_number())
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Duplicate webhook event exists but tracking row not found"));
+        }
 
         // 1. Save history to PostgreSQL
         ShipmentTracking tracking = ShipmentTracking.builder()
                 .order(order)
                 .trackingNumber(payload.getTracking_number())
-                .shipperCode(payload.getShipper_code())
+                .shipperCode(StringUtils.defaultIfBlank(payload.getShipper_code(), "GHN"))
                 .status(payload.getStatus())
                 .location(payload.getLocation())
                 .description(payload.getDescription())
@@ -85,31 +101,17 @@ public class ShipmentTrackingServiceImpl implements ShipmentTrackingService {
     }
 
     private void applyWorkflowTransition(Long orderId, String rawStatus) {
-        if (rawStatus == null || rawStatus.isBlank()) {
-            return;
-        }
-        String normalized = rawStatus.trim().toUpperCase(Locale.ROOT);
         OrderPojo pojo = OrderPojo.builder().id(orderId).build();
+        WorkflowAction action = ghnStatusMapper.map(rawStatus);
 
         try {
-            if (normalized.contains("RETURN")) {
-                ordersProcessService.markAsReturned(pojo);
-                return;
-            }
-            if (normalized.equals("DELIVERED") || normalized.equals("DELIVERY_COMPLETE") || normalized.equals("COMPLETED")) {
-                ordersProcessService.markAsCompleted(pojo);
-                return;
-            }
-            if (normalized.contains("DELIVERY_FAILED") || normalized.equals("FAILED") || normalized.contains("UNDELIVERABLE")) {
-                ordersProcessService.markAsDeliveryFailed(pojo);
-                return;
-            }
-            if (normalized.contains("CANCELLED") || normalized.contains("RECALL")) {
-                ordersProcessService.markAsDeliveryCancelled(pojo);
-                return;
-            }
-            if (normalized.equals("IN_TRANSIT") || normalized.equals("ON_ROUTE") || normalized.equals("OUT_FOR_DELIVERY")) {
-                ordersProcessService.markAsDeliveryOnRoute(pojo);
+            switch (action) {
+                case RETURNED -> ordersProcessService.markAsReturned(pojo);
+                case COMPLETED -> ordersProcessService.markAsCompleted(pojo);
+                case DELIVERY_FAILED -> ordersProcessService.markAsDeliveryFailed(pojo);
+                case DELIVERY_CANCELLED -> ordersProcessService.markAsDeliveryCancelled(pojo);
+                case DELIVERY_ON_ROUTE -> ordersProcessService.markAsDeliveryOnRoute(pojo);
+                case NONE -> log.warn("Unmapped shipping status '{}' for order {}", rawStatus, orderId);
             }
         } catch (Exception e) {
             log.error("Failed to apply shipping status {} to order {}: {}", rawStatus, orderId, e.getMessage());

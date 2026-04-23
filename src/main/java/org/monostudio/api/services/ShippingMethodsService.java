@@ -1,6 +1,7 @@
 package org.monostudio.api.services;
 
 import org.monostudio.api.models.ShippingRatePojo;
+import org.monostudio.api.models.ShippingRateRequestContext;
 import org.monostudio.jpa.entities.ShippingMethod;
 
 /**
@@ -16,5 +17,5 @@ public interface ShippingMethodsService {
      * @param subtotal The cart subtotal in VND (may be null)
      * @return A ShippingRatePojo with the computed fee
      */
-    ShippingRatePojo computeRate(ShippingMethod method, Integer subtotal, Double dstLat, Double dstLng);
+    ShippingRatePojo computeRate(ShippingMethod method, ShippingRateRequestContext context);
 }

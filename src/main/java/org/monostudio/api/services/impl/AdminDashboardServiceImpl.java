@@ -19,8 +19,8 @@ import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static org.monostudio.config.Constants.ORDER_STATUS_PAID_CONFIRMED;
-import static org.monostudio.config.Constants.ORDER_STATUS_COMPLETED;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_COMPLETED;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_CONFIRMED;
 
 @Transactional(readOnly = true)
 @Service
@@ -57,9 +57,9 @@ public class AdminDashboardServiceImpl
 
         // Revenue from paid/confirmed + completed orders
         long paidConfirmedRevenue = ordersRepository.sumRevenueByStatusAndDateBetween(
-            ORDER_STATUS_PAID_CONFIRMED, fromInstant, toInstant);
+            ORDER_FULFILLMENT_STATUS_CONFIRMED, fromInstant, toInstant);
         long completedRevenue = ordersRepository.sumRevenueByStatusAndDateBetween(
-            ORDER_STATUS_COMPLETED, fromInstant, toInstant);
+            ORDER_FULFILLMENT_STATUS_COMPLETED, fromInstant, toInstant);
         long totalRevenue = paidConfirmedRevenue + completedRevenue;
 
         long totalOrders = ordersRepository.countByDateBetween(fromInstant, toInstant);

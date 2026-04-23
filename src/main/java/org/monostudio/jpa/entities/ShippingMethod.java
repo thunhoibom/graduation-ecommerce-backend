@@ -47,6 +47,16 @@ public class ShippingMethod
     private boolean active;
     @Column(name = "shipping_method_price_per_km")
     private Integer pricePerKm;
+    @Builder.Default
+    @Column(name = "shipping_method_carrier_code", length = 32)
+    private String carrierCode = "LOCAL";
+    @Builder.Default
+    @Column(name = "shipping_method_rate_mode", length = 32)
+    private String rateMode = "DISTANCE";
+    @Column(name = "shipping_method_carrier_service_code", length = 64)
+    private String carrierServiceCode;
+    @Column(name = "shipping_method_carrier_shop_id")
+    private Long carrierShopId;
 
     /**
      * Copy-constructor.
@@ -62,5 +72,9 @@ public class ShippingMethod
         this.estimatedDaysMax = source.estimatedDaysMax;
         this.active = source.active;
         this.pricePerKm = source.pricePerKm;
+        this.carrierCode = source.carrierCode;
+        this.rateMode = source.rateMode;
+        this.carrierServiceCode = source.carrierServiceCode;
+        this.carrierShopId = source.carrierShopId;
     }
 }

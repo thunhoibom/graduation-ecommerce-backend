@@ -5,7 +5,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.monostudio.jpa.Repository;
 import org.monostudio.jpa.entities.Order;
-import org.monostudio.jpa.entities.OrderStatus;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -25,9 +24,15 @@ public interface OrdersRepository
 
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Order s "
-        + "SET s.status = :status "
+        + "SET s.fulfillmentStatus = :status "
         + "WHERE s.id = :id")
-    int setStatus(@Param("id") Long id, @Param("status") OrderStatus status);
+    int setFulfillmentStatus(@Param("id") Long id, @Param("status") String status);
+
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Order s "
+        + "SET s.paymentStatus = :status "
+        + "WHERE s.id = :id")
+    int setPaymentStatus(@Param("id") Long id, @Param("status") String status);
 
     @Modifying
     @Query("UPDATE Order s "
@@ -46,10 +51,10 @@ public interface OrdersRepository
     /**
      * Count orders by status (all-time or within a date range).
      */
-    @Query("SELECT s.status.name AS status, COUNT(s) AS count "
+    @Query("SELECT s.fulfillmentStatus AS status, COUNT(s) AS count "
         + "FROM Order s "
         + "WHERE s.date >= :from AND s.date <= :to "
-        + "GROUP BY s.status.name")
+        + "GROUP BY s.fulfillmentStatus")
     List<OrderStatusCountProjection> countByStatusGrouped(
         @Param("from") Instant from,
         @Param("to") Instant to);
@@ -59,7 +64,7 @@ public interface OrdersRepository
      */
     @Query("SELECT COALESCE(SUM(s.totalValue), 0) "
         + "FROM Order s "
-        + "WHERE s.status.name = :completedStatus "
+        + "WHERE s.fulfillmentStatus = :completedStatus "
         + "AND s.date >= :from AND s.date <= :to")
     long sumRevenueByStatusAndDateBetween(
         @Param("completedStatus") String completedStatus,
@@ -145,11 +150,8 @@ public interface OrdersRepository
         JOIN   products p ON od.product_id = p.product_id
         WHERE  o.order_date >= :from
           AND  o.order_date <= :to
-          AND  o.order_status_id IN (
-                   SELECT os.order_status_id
-                   FROM   order_statuses os
-                   WHERE  os.order_status_name IN ('Paid, Confirmed', 'Delivery Complete')
-               )
+          AND  o.payment_status = 'PAID'
+          AND  o.fulfillment_status IN ('CONFIRMED', 'DELIVERY_COMPLETE')
         GROUP  BY p.product_id, p.product_name
         ORDER  BY unitsSold DESC
         LIMIT  :limit
@@ -170,11 +172,8 @@ public interface OrdersRepository
         WHERE  od.product_variant_id IS NOT NULL
           AND  o.order_date >= :from
           AND  o.order_date <= :to
-          AND  o.order_status_id IN (
-                   SELECT os.order_status_id
-                   FROM   order_statuses os
-                   WHERE  os.order_status_name IN ('Paid, Confirmed', 'Delivery Complete')
-               )
+          AND  o.payment_status = 'PAID'
+          AND  o.fulfillment_status IN ('CONFIRMED', 'DELIVERY_COMPLETE')
         GROUP  BY od.product_variant_id
         """, nativeQuery = true)
     List<VariantSalesProjection> findVariantUnitsSold(
@@ -189,10 +188,10 @@ public interface OrdersRepository
         SELECT COUNT(od) > 0
         FROM   OrderDetail od
         JOIN   od.order o
-        JOIN   o.status os
         WHERE  o.customer.id = :customerId
           AND  od.product.id = :productId
-          AND  os.name IN ('Paid, Confirmed', 'Delivery Complete')
+          AND  o.paymentStatus = 'PAID'
+          AND  o.fulfillmentStatus IN ('CONFIRMED', 'DELIVERY_COMPLETE')
         """)
     boolean hasCompletedOrderWithProduct(
         @Param("customerId") Long customerId,
@@ -205,8 +204,8 @@ public interface OrdersRepository
      * @param statusName The exact name of the status to match.
      * @param cutoff     Orders created before this time will be returned.
      */
-    @Query("SELECT o FROM Order o WHERE o.status.name = :statusName AND o.date < :cutoff")
-    List<Order> findByStatusNameAndDateBefore(
+    @Query("SELECT o FROM Order o WHERE o.paymentStatus = :statusName AND o.date < :cutoff")
+    List<Order> findByPaymentStatusAndDateBefore(
         @Param("statusName") String statusName,
         @Param("cutoff") Instant cutoff);
 

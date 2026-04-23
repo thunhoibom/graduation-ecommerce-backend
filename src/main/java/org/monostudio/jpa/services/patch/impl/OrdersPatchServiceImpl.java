@@ -44,11 +44,14 @@ public class OrdersPatchServiceImpl
                 }
             }
 
-            if (changes.containsKey("status")) {
-                String statusName = (String) changes.get("status");
-                if (!StringUtils.isBlank(statusName)) {
+            if (changes.containsKey("status")
+                || changes.containsKey("fulfillmentStatus")
+                || changes.containsKey("paymentStatus")) {
+                String statusName = (String) changes.getOrDefault("status", changes.get("fulfillmentStatus"));
+                String paymentStatusName = (String) changes.get("paymentStatus");
+                if (!StringUtils.isBlank(statusName) || !StringUtils.isBlank(paymentStatusName)) {
                     throw new BadInputException(
-                        "Order status cannot be patched directly. "
+                        "Order fulfillment/payment status cannot be patched directly. "
                             + "Use process endpoints to enforce valid transitions."
                     );
                 }

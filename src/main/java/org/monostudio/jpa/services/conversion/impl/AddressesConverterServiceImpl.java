@@ -22,6 +22,10 @@ public class AddressesConverterServiceImpl
             .city(source.getCity())
             .municipality(source.getMunicipality())
             .firstLine(source.getFirstLine())
+            .latitude(source.getLatitude())
+            .longitude(source.getLongitude())
+            .districtId(source.getDistrictId())
+            .wardCode(source.getWardCode())
             .build();
         if (!StringUtils.isBlank(source.getSecondLine())) {
             target.setSecondLine(source.getSecondLine());
@@ -44,6 +48,10 @@ public class AddressesConverterServiceImpl
             .municipality(source.getMunicipality())
             .postalCode(source.getPostalCode())
             .notes((source.getNotes()))
+            .latitude(source.getLatitude())
+            .longitude(source.getLongitude())
+            .districtId(source.getDistrictId())
+            .wardCode(source.getWardCode())
             .build();
     }
 

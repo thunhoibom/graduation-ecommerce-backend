@@ -31,7 +31,11 @@ public class OrdersPredicateServiceImpl
                         predicate.and(basePath.date.eq(Instant.parse(stringValue)));
                         break;
                     case "statusName":
-                        predicate.and(basePath.status.name.eq(stringValue));
+                    case "fulfillmentStatus":
+                        predicate.and(basePath.fulfillmentStatus.eq(stringValue));
+                        break;
+                    case "paymentStatus":
+                        predicate.and(basePath.paymentStatus.eq(stringValue));
                         break;
                     case "token":
                         predicate.and(basePath.transactionToken.eq(stringValue));

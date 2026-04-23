@@ -27,4 +27,6 @@ public class AddressPojo {
     private String notes;
     private Double latitude;
     private Double longitude;
+    private Integer districtId;
+    private String wardCode;
 }

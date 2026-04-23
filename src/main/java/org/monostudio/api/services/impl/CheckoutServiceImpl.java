@@ -14,6 +14,7 @@ import org.monostudio.api.models.OrderDetailPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.PaymentResultPojo;
+import org.monostudio.api.models.ShippingRateRequestContext;
 import org.monostudio.api.services.AdminNotificationService;
 import org.monostudio.api.services.CartPricingService;
 import org.monostudio.api.services.CheckoutService;
@@ -55,7 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.monostudio.config.Constants.ORDER_STATUS_PAYMENT_STARTED;
+import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_PAYMENT_STARTED;
 @Service
 public class CheckoutServiceImpl
     implements CheckoutService {
@@ -189,7 +190,14 @@ public class CheckoutServiceImpl
         // Compute fee with distance tracking if applicable
         Double lat = request.getShippingAddress() != null ? request.getShippingAddress().getLatitude() : null;
         Double lng = request.getShippingAddress() != null ? request.getShippingAddress().getLongitude() : null;
-        int shippingFee = shippingMethodsService.computeRate(shippingMethod, subtotal, lat, lng).getFee();
+        ShippingRateRequestContext shippingRateContext = ShippingRateRequestContext.builder()
+            .subtotal(subtotal)
+            .latitude(lat)
+            .longitude(lng)
+            .toDistrictId(request.getShippingAddress() != null ? request.getShippingAddress().getDistrictId() : null)
+            .toWardCode(request.getShippingAddress() != null ? request.getShippingAddress().getWardCode() : null)
+            .build();
+        int shippingFee = shippingMethodsService.computeRate(shippingMethod, shippingRateContext).getFee();
 
         // ── 6. Pricing (promotion rules + optional coupon) — same logic as POST /public/cart/calculate ──
         Long checkoutCustomerId = resolveCustomerIdForCheckout(request);
@@ -431,7 +439,7 @@ public class CheckoutServiceImpl
 
     private OrderPojo getSellRequestedWithMatchingToken(String transactionToken) throws EntityNotFoundException {
         Map<String, String> startedWithTokenMatcher = new HashMap<>(Map.of(
-            "statusCode", ORDER_STATUS_PAYMENT_STARTED,
+            "paymentStatus", ORDER_PAYMENT_STATUS_PAYMENT_STARTED,
             "token", transactionToken));
         Predicate startedTransactionWithMatchingToken = ordersPredicateService.parseMap(startedWithTokenMatcher);
         return ordersCrudService.readOne(startedTransactionWithMatchingToken);

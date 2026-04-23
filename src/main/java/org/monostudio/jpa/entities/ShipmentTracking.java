@@ -20,6 +20,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
 @Entity
@@ -28,7 +29,11 @@ import java.time.Instant;
     indexes = {
         @Index(columnList = "order_id"),
         @Index(columnList = "tracking_number")
-    })
+    },
+    uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"order_id", "tracking_number", "status", "event_time"})
+    }
+)
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

@@ -12,4 +12,9 @@ public class WebhookProperties {
      * Secret token required in the Authorization header (Bearer) for shipping webhooks.
      */
     private String secret;
+
+    /**
+     * Optional secret dedicated to GHN callbacks. If blank, falls back to "secret".
+     */
+    private String ghnSecret;
 }

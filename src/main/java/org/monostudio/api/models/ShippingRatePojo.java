@@ -22,4 +22,7 @@ public class ShippingRatePojo {
     private int estimatedDaysMin;
     private int estimatedDaysMax;
     private boolean freeShipping;
+    private String carrierCode;
+    private String providerFeeSource;
+    private boolean estimated;
 }

@@ -9,18 +9,23 @@ import static lombok.AccessLevel.PRIVATE;
  */
 @NoArgsConstructor(access = PRIVATE)
 public final class Constants {
-    public static final String ORDER_STATUS_PENDING = "Pending";
-    public static final String ORDER_STATUS_PAYMENT_STARTED = "Payment Started";
-    public static final String ORDER_STATUS_PAYMENT_CANCELLED = "Payment Cancelled";
-    public static final String ORDER_STATUS_PAYMENT_FAILED = "Payment Failed";
-    public static final String ORDER_STATUS_PAID_UNCONFIRMED = "Paid, Unconfirmed";
-    public static final String ORDER_STATUS_PAID_CONFIRMED = "Paid, Confirmed";
-    public static final String ORDER_STATUS_REJECTED = "Rejected";
-    public static final String ORDER_STATUS_DELIVERY_ON_ROUTE = "Delivery On Route";
-    public static final String ORDER_STATUS_DELIVERY_FAILED = "Delivery Failed";
-    public static final String ORDER_STATUS_DELIVERY_CANCELLED = "Delivery Cancelled";
-    public static final String ORDER_STATUS_RETURNED = "Returned";
-    public static final String ORDER_STATUS_COMPLETED = "Delivery Complete";
+    public static final String ORDER_FULFILLMENT_STATUS_PENDING = "PENDING";
+    public static final String ORDER_FULFILLMENT_STATUS_CONFIRMED = "CONFIRMED";
+    public static final String ORDER_FULFILLMENT_STATUS_REJECTED = "REJECTED";
+    public static final String ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE = "DELIVERY_ON_ROUTE";
+    public static final String ORDER_FULFILLMENT_STATUS_DELIVERY_FAILED = "DELIVERY_FAILED";
+    public static final String ORDER_FULFILLMENT_STATUS_DELIVERY_CANCELLED = "DELIVERY_CANCELLED";
+    public static final String ORDER_FULFILLMENT_STATUS_COMPLETED = "DELIVERY_COMPLETE";
+    public static final String ORDER_FULFILLMENT_STATUS_RETURNED = "RETURNED";
+
+    public static final String ORDER_PAYMENT_STATUS_UNPAID = "UNPAID";
+    public static final String ORDER_PAYMENT_STATUS_PAYMENT_STARTED = "PAYMENT_STARTED";
+    public static final String ORDER_PAYMENT_STATUS_PAID = "PAID";
+    public static final String ORDER_PAYMENT_STATUS_PAYMENT_FAILED = "PAYMENT_FAILED";
+    public static final String ORDER_PAYMENT_STATUS_PAYMENT_CANCELLED = "PAYMENT_CANCELLED";
+    public static final String ORDER_PAYMENT_STATUS_REFUND_PENDING = "REFUND_PENDING";
+    public static final String ORDER_PAYMENT_STATUS_REFUNDED = "REFUNDED";
+    public static final String ORDER_PAYMENT_STATUS_PARTIALLY_REFUNDED = "PARTIALLY_REFUNDED";
     public static final String BILLING_TYPE_INDIVIDUAL = "Bill";
     public static final String BILLING_TYPE_ENTERPRISE = "Enterprise Invoice";
     public static final String VNPAY_TXN_REF_PARAM = "vnp_TxnRef";

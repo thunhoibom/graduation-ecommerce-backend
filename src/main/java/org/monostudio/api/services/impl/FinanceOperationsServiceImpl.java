@@ -48,14 +48,13 @@ public class FinanceOperationsServiceImpl
     implements FinanceOperationsService {
 
     private static final Set<String> SUCCESS_ORDER_STATUSES = Set.of(
-        Constants.ORDER_STATUS_PAID_CONFIRMED,
-        Constants.ORDER_STATUS_COMPLETED,
-        Constants.ORDER_STATUS_PAID_UNCONFIRMED
+        Constants.ORDER_FULFILLMENT_STATUS_CONFIRMED,
+        Constants.ORDER_FULFILLMENT_STATUS_COMPLETED
     );
 
     private static final Set<String> FAILED_ORDER_STATUSES = Set.of(
-        Constants.ORDER_STATUS_PAYMENT_FAILED,
-        Constants.ORDER_STATUS_PAYMENT_CANCELLED
+        Constants.ORDER_PAYMENT_STATUS_PAYMENT_FAILED,
+        Constants.ORDER_PAYMENT_STATUS_PAYMENT_CANCELLED
     );
 
     private final OrdersRepository ordersRepository;
@@ -305,7 +304,8 @@ public class FinanceOperationsServiceImpl
 
         List<FinanceReconciliationMismatchPojo> result = new ArrayList<>();
         for (Order order : orders) {
-            String orderStatus = order.getStatus() != null ? order.getStatus().getName() : null;
+            String orderStatus = order.getFulfillmentStatus();
+            String paymentStatus = order.getPaymentStatus();
             PaymentCallbackLog callback = callbackByToken.get(order.getTransactionToken());
             String callbackResult = callback != null ? callback.getResult().name() : null;
 
@@ -322,7 +322,7 @@ public class FinanceOperationsServiceImpl
             }
 
             if (callback != null && "SUCCESS".equalsIgnoreCase(callbackResult)
-                && FAILED_ORDER_STATUSES.contains(orderStatus)) {
+                && FAILED_ORDER_STATUSES.contains(paymentStatus)) {
                 result.add(FinanceReconciliationMismatchPojo.builder()
                     .mismatchKey(keyFor(order.getId(), "callback-success-order-failed"))
                     .orderId(order.getId())
@@ -334,7 +334,8 @@ public class FinanceOperationsServiceImpl
 
             if (callback != null
                 && ("ABORTED".equalsIgnoreCase(callbackResult) || "GATEWAY_ERROR".equalsIgnoreCase(callbackResult))
-                && SUCCESS_ORDER_STATUSES.contains(orderStatus)) {
+                && SUCCESS_ORDER_STATUSES.contains(orderStatus)
+                && Constants.ORDER_PAYMENT_STATUS_PAID.equals(paymentStatus)) {
                 result.add(FinanceReconciliationMismatchPojo.builder()
                     .mismatchKey(keyFor(order.getId(), "callback-failed-order-success"))
                     .orderId(order.getId())
@@ -407,13 +408,14 @@ public class FinanceOperationsServiceImpl
     }
 
     private FinancePaymentItemPojo toPaymentItem(Order order, PaymentCallbackLog callback) {
-        String orderStatus = order.getStatus() != null ? order.getStatus().getName() : null;
+        String orderStatus = order.getFulfillmentStatus();
+        String paymentStatus = order.getPaymentStatus();
         return FinancePaymentItemPojo.builder()
             .orderId(order.getId())
             .transactionToken(order.getTransactionToken())
             .gateway(order.getPaymentType() != null ? order.getPaymentType().getName() : null)
             .orderStatus(orderStatus)
-            .paymentStatus(derivePaymentStatus(orderStatus))
+            .paymentStatus(derivePaymentStatus(paymentStatus))
             .orderTotal(order.getTotalValue())
             .callbackResult(callback != null ? callback.getResult().name() : null)
             .callbackAuthorizedAmount(callback != null ? callback.getAuthorizedAmount() : null)
@@ -463,18 +465,20 @@ public class FinanceOperationsServiceImpl
             .build();
     }
 
-    private String derivePaymentStatus(String orderStatus) {
-        if (!StringUtils.hasText(orderStatus)) {
+    private String derivePaymentStatus(String paymentStatus) {
+        if (!StringUtils.hasText(paymentStatus)) {
             return "UNKNOWN";
         }
-        if (SUCCESS_ORDER_STATUSES.contains(orderStatus)) {
+        if (Constants.ORDER_PAYMENT_STATUS_PAID.equalsIgnoreCase(paymentStatus)
+            || Constants.ORDER_PAYMENT_STATUS_REFUNDED.equalsIgnoreCase(paymentStatus)
+            || Constants.ORDER_PAYMENT_STATUS_PARTIALLY_REFUNDED.equalsIgnoreCase(paymentStatus)) {
             return "SUCCESS";
         }
-        if (FAILED_ORDER_STATUSES.contains(orderStatus)) {
-            return Constants.ORDER_STATUS_PAYMENT_FAILED.equalsIgnoreCase(orderStatus) ? "FAILED" : "CANCELLED";
+        if (FAILED_ORDER_STATUSES.contains(paymentStatus)) {
+            return Constants.ORDER_PAYMENT_STATUS_PAYMENT_FAILED.equalsIgnoreCase(paymentStatus) ? "FAILED" : "CANCELLED";
         }
-        if (Constants.ORDER_STATUS_PAYMENT_STARTED.equalsIgnoreCase(orderStatus)
-            || Constants.ORDER_STATUS_PENDING.equalsIgnoreCase(orderStatus)) {
+        if (Constants.ORDER_PAYMENT_STATUS_PAYMENT_STARTED.equalsIgnoreCase(paymentStatus)
+            || Constants.ORDER_PAYMENT_STATUS_UNPAID.equalsIgnoreCase(paymentStatus)) {
             return "PENDING";
         }
         return "UNKNOWN";

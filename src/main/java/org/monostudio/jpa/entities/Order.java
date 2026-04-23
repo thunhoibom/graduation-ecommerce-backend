@@ -75,9 +75,10 @@ public class Order
     @JoinColumn(name = "payment_type_id", updatable = false, nullable = false)
     @ManyToOne(optional = false, cascade = CascadeType.REFRESH, fetch = FetchType.LAZY)
     private PaymentType paymentType;
-    @JoinColumn(name = "order_status_id", updatable = false, nullable = false)
-    @ManyToOne(optional = false, cascade = CascadeType.REFRESH, fetch = FetchType.LAZY)
-    private OrderStatus status;
+    @Column(name = "fulfillment_status", nullable = false)
+    private String fulfillmentStatus;
+    @Column(name = "payment_status", nullable = false)
+    private String paymentStatus;
     @JoinColumn(name = "billing_type_id", updatable = false, nullable = false)
     @ManyToOne(optional = false, cascade = CascadeType.REFRESH, fetch = FetchType.LAZY)
     private BillingType billingType;
@@ -126,7 +127,6 @@ public class Order
     /**
      * Please note that this copy-constructor only preserves the following relationships.
      * <ul>
-     *   <li>OrderStatus</li>
      *   <li>PaymentType</li>
      *   <li>BillingType</li>
      * </ul>
@@ -145,7 +145,8 @@ public class Order
         this.discountValue = source.discountValue;
         this.transactionToken = source.transactionToken;
         this.paymentType = source.paymentType;
-        this.status = source.status;
+        this.fulfillmentStatus = source.fulfillmentStatus;
+        this.paymentStatus = source.paymentStatus;
         this.billingType = source.billingType;
         this.billingAddress = null;
         this.customer = null;

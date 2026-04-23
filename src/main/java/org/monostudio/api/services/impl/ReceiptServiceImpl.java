@@ -113,7 +113,7 @@ public class ReceiptServiceImpl
                 }
             }
             target.setItems(targetItems);
-            target.setStatus(foundMatch.getStatus().getName());
+            target.setStatus(foundMatch.getFulfillmentStatus());
         }
 
         return target;

@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.monostudio.api.models.ShippingRatePojo;
+import org.monostudio.api.models.ShippingRateRequestContext;
 import org.monostudio.api.services.ShippingMethodsService;
 import org.monostudio.jpa.entities.ShippingMethod;
 import org.monostudio.jpa.repositories.ShippingMethodsRepository;
@@ -44,16 +45,25 @@ public class PublicShippingMethodsController {
     @Operation(summary = "List active shipping methods with computed fees")
     @Cacheable(
         cacheNames = CacheNames.PUBLIC_SHIPPING_METHODS,
-        key = "@cacheKeyBuilder.shipping(#subtotal, #latitude, #longitude)"
+        key = "@cacheKeyBuilder.shipping(#subtotal, #latitude, #longitude, #toDistrictId, #toWardCode)"
     )
     public List<ShippingRatePojo> getShippingMethods(
         @RequestParam(required = false) Integer subtotal,
         @RequestParam(required = false) Double latitude,
-        @RequestParam(required = false) Double longitude
+        @RequestParam(required = false) Double longitude,
+        @RequestParam(required = false) Integer toDistrictId,
+        @RequestParam(required = false) String toWardCode
     ) {
         List<ShippingMethod> activeMethods = shippingMethodsRepository.findByActiveTrue();
+        ShippingRateRequestContext context = ShippingRateRequestContext.builder()
+            .subtotal(subtotal)
+            .latitude(latitude)
+            .longitude(longitude)
+            .toDistrictId(toDistrictId)
+            .toWardCode(toWardCode)
+            .build();
         return activeMethods.stream()
-            .map(method -> shippingMethodsService.computeRate(method, subtotal, latitude, longitude))
+            .map(method -> shippingMethodsService.computeRate(method, context))
             .collect(Collectors.toList());
     }
 }

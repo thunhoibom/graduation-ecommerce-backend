@@ -40,4 +40,14 @@ public class ShippingMethodPojo {
 
     @Min(0)
     private Integer pricePerKm;
+
+    @Builder.Default
+    private String carrierCode = "LOCAL";
+
+    @Builder.Default
+    private String rateMode = "DISTANCE";
+
+    private String carrierServiceCode;
+
+    private Long carrierShopId;
 }

@@ -16,7 +16,8 @@ public class OrdersSortSpec {
     public static final Map<String, OrderSpecifier<?>> ORDER_SPEC_MAP = Map.of(
         "buyOrder", BASE_PATH.id.asc(),
         "date", BASE_PATH.date.asc(),
-        "status", BASE_PATH.status.code.asc(),
+        "status", BASE_PATH.fulfillmentStatus.asc(),
+        "paymentStatus", BASE_PATH.paymentStatus.asc(),
         "customer", CUSTOMER_PATH.lastName.asc(),
         "shipper", BASE_PATH.shippingMethod.name.asc(),
         "totalValue", BASE_PATH.totalValue.asc(),
