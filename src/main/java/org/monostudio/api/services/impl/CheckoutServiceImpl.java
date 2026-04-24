@@ -19,6 +19,7 @@ import org.monostudio.api.services.AdminNotificationService;
 import org.monostudio.api.services.CartPricingService;
 import org.monostudio.api.services.CheckoutService;
 import org.monostudio.api.services.OrdersProcessService;
+import org.monostudio.api.services.ProductPricingSnapshotService;
 import org.monostudio.api.services.StockReservationService;
 import org.monostudio.api.services.ShippingMethodsService;
 import org.monostudio.common.exceptions.BadInputException;
@@ -79,6 +80,7 @@ public class CheckoutServiceImpl
     private final ShippingMethodsService shippingMethodsService;
     private final PaymentCallbackLogRepository paymentCallbackLogRepository;
     private final AdminNotificationService adminNotificationService;
+    private final ProductPricingSnapshotService productPricingSnapshotService;
 
     static final double TAX_PERCENT = 0.19;
 
@@ -101,7 +103,8 @@ public class CheckoutServiceImpl
         CustomersRepository customersRepository,
         ShippingMethodsService shippingMethodsService,
         PaymentCallbackLogRepository paymentCallbackLogRepository,
-        AdminNotificationService adminNotificationService
+        AdminNotificationService adminNotificationService,
+        ProductPricingSnapshotService productPricingSnapshotService
     ) {
         this.ordersCrudService = ordersCrudService;
         this.ordersProcessService = ordersProcessService;
@@ -121,6 +124,7 @@ public class CheckoutServiceImpl
         this.shippingMethodsService = shippingMethodsService;
         this.paymentCallbackLogRepository = paymentCallbackLogRepository;
         this.adminNotificationService = adminNotificationService;
+        this.productPricingSnapshotService = productPricingSnapshotService;
     }
 
     /**
@@ -297,7 +301,8 @@ public class CheckoutServiceImpl
         }
 
         Product product = variant.getProduct();
-        int unitValue = product.getPrice() + variant.getPriceModifier();
+        var productPricing = productPricingSnapshotService.calculate(product);
+        int unitValue = productPricing.currentPrice() + variant.getPriceModifier();
         String description = units + "x " + product.getName();
 
         return OrderDetailPojo.builder()

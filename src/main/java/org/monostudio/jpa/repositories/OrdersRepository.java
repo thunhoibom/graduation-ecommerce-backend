@@ -138,7 +138,7 @@ public interface OrdersRepository
     /**
      * Top products by units sold, within a date range.
      * Joins orders → order_details → products.
-     * Only counts PAID/CONFIRMED/COMPLETED orders to reflect actual revenue.
+     * Only counts PAID orders that are being fulfilled/completed.
      */
     @Query(value = """
         SELECT p.product_id                                          AS productId,
@@ -151,7 +151,7 @@ public interface OrdersRepository
         WHERE  o.order_date >= :from
           AND  o.order_date <= :to
           AND  o.payment_status = 'PAID'
-          AND  o.fulfillment_status IN ('CONFIRMED', 'DELIVERY_COMPLETE')
+          AND  o.fulfillment_status IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE')
         GROUP  BY p.product_id, p.product_name
         ORDER  BY unitsSold DESC
         LIMIT  :limit
@@ -173,7 +173,7 @@ public interface OrdersRepository
           AND  o.order_date >= :from
           AND  o.order_date <= :to
           AND  o.payment_status = 'PAID'
-          AND  o.fulfillment_status IN ('CONFIRMED', 'DELIVERY_COMPLETE')
+          AND  o.fulfillment_status IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE')
         GROUP  BY od.product_variant_id
         """, nativeQuery = true)
     List<VariantSalesProjection> findVariantUnitsSold(
@@ -191,7 +191,7 @@ public interface OrdersRepository
         WHERE  o.customer.id = :customerId
           AND  od.product.id = :productId
           AND  o.paymentStatus = 'PAID'
-          AND  o.fulfillmentStatus IN ('CONFIRMED', 'DELIVERY_COMPLETE')
+          AND  o.fulfillmentStatus IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE')
         """)
     boolean hasCompletedOrderWithProduct(
         @Param("customerId") Long customerId,

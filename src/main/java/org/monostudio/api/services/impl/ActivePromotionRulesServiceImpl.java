@@ -46,6 +46,7 @@ public class ActivePromotionRulesServiceImpl implements ActivePromotionRulesServ
         target.setPriority(source.getPriority());
         target.setCombinable(source.isCombinable());
         target.setActive(source.isActive());
+        target.setScope(source.getScope());
         target.setActiveFrom(source.getActiveFrom());
         target.setActiveUntil(source.getActiveUntil());
         target.setMutualExclusionGroup(source.getMutualExclusionGroup());

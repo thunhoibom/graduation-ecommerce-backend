@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 
 import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_COMPLETED;
 import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_CONFIRMED;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_PROCESSING;
 
 @Transactional(readOnly = true)
 @Service
@@ -58,9 +59,11 @@ public class AdminDashboardServiceImpl
         // Revenue from paid/confirmed + completed orders
         long paidConfirmedRevenue = ordersRepository.sumRevenueByStatusAndDateBetween(
             ORDER_FULFILLMENT_STATUS_CONFIRMED, fromInstant, toInstant);
+        long processingRevenue = ordersRepository.sumRevenueByStatusAndDateBetween(
+            ORDER_FULFILLMENT_STATUS_PROCESSING, fromInstant, toInstant);
         long completedRevenue = ordersRepository.sumRevenueByStatusAndDateBetween(
             ORDER_FULFILLMENT_STATUS_COMPLETED, fromInstant, toInstant);
-        long totalRevenue = paidConfirmedRevenue + completedRevenue;
+        long totalRevenue = paidConfirmedRevenue + processingRevenue + completedRevenue;
 
         long totalOrders = ordersRepository.countByDateBetween(fromInstant, toInstant);
 

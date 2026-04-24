@@ -47,6 +47,7 @@ import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_DELIVERY_
 import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_DELIVERY_FAILED;
 import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE;
 import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_PENDING;
+import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_PROCESSING;
 import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_REJECTED;
 import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_RETURNED;
 import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_PAID;
@@ -341,7 +342,7 @@ public class OrdersProcessServiceImpl
             throw new BadInputException(THE_TRANSACTION_IS_NOT_IN_A_VALID_STATE_FOR_THIS_OPERATION);
         }
 
-        ordersRepository.setFulfillmentStatus(existingOrder.getId(), ORDER_FULFILLMENT_STATUS_CONFIRMED);
+        ordersRepository.setFulfillmentStatus(existingOrder.getId(), ORDER_FULFILLMENT_STATUS_PROCESSING);
 
         OrderPojo target = this.convertOrThrowException(existingOrder);
 
@@ -356,8 +357,8 @@ public class OrdersProcessServiceImpl
             pojoDetails.add(orderDetailPojo);
         }
         target.setDetails(pojoDetails);
-        target.setStatus(ORDER_FULFILLMENT_STATUS_CONFIRMED);
-        target.setFulfillmentStatus(ORDER_FULFILLMENT_STATUS_CONFIRMED);
+        target.setStatus(ORDER_FULFILLMENT_STATUS_PROCESSING);
+        target.setFulfillmentStatus(ORDER_FULFILLMENT_STATUS_PROCESSING);
 
         if (shipmentOrchestratorService != null) {
             shipmentOrchestratorService.requestShipmentCreation(existingOrder.getId());
@@ -516,11 +517,26 @@ public class OrdersProcessServiceImpl
     })
     public OrderPojo markAsDeliveryOnRoute(OrderPojo sell)
         throws BadInputException, EntityNotFoundException {
-        return moveStatus(
-            sell,
-            ORDER_FULFILLMENT_STATUS_CONFIRMED,
-            ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE
-        );
+        Order existingOrder = this.fetchExistingOrThrowException(sell);
+        String currentStatus = existingOrder.getFulfillmentStatus();
+        boolean canHandover =
+            ORDER_FULFILLMENT_STATUS_PROCESSING.equals(currentStatus)
+                || ORDER_FULFILLMENT_STATUS_CONFIRMED.equals(currentStatus);
+        if (!canHandover) {
+            throw new BadInputException(
+                "Cannot move order " + existingOrder.getId()
+                    + " to '" + ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE + "'"
+                    + " — current status is '" + currentStatus
+                    + "', expected '" + ORDER_FULFILLMENT_STATUS_PROCESSING + "'.");
+        }
+
+        ordersRepository.setFulfillmentStatus(existingOrder.getId(), ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE);
+        OrderPojo target = this.convertOrThrowException(existingOrder);
+        target.setStatus(ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE);
+        target.setFulfillmentStatus(ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE);
+        sendClientEmail(target);
+        sendOwnerEmail(target);
+        return target;
     }
 
     @Override

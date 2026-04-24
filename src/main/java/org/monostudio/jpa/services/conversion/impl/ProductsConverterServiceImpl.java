@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.ImagePojo;
 import org.monostudio.api.models.ProductCategoryPojo;
 import org.monostudio.api.models.ProductPojo;
+import org.monostudio.api.services.ProductPricingSnapshotService;
 import org.monostudio.jpa.entities.Image;
 import org.monostudio.jpa.entities.Product;
 import org.monostudio.jpa.entities.ProductCategory;
@@ -33,6 +34,7 @@ public class ProductsConverterServiceImpl
     private final ProductsCategoriesRepository productsCategoriesRepository;
     private final ProductCategoriesConverterService productCategoriesConverterService;
     private final ProductReviewsRepository productReviewsRepository;
+    private final ProductPricingSnapshotService productPricingSnapshotService;
 
     @Autowired
     public ProductsConverterServiceImpl(
@@ -40,13 +42,15 @@ public class ProductsConverterServiceImpl
         ImagesConverterService imagesConverterService,
         ProductsCategoriesRepository productsCategoriesRepository,
         ProductCategoriesConverterService productCategoriesConverterService,
-        ProductReviewsRepository productReviewsRepository
+        ProductReviewsRepository productReviewsRepository,
+        ProductPricingSnapshotService productPricingSnapshotService
     ) {
         this.productImagesRepository = productImagesRepository;
         this.imagesConverterService = imagesConverterService;
         this.productsCategoriesRepository = productsCategoriesRepository;
         this.productCategoriesConverterService = productCategoriesConverterService;
         this.productReviewsRepository = productReviewsRepository;
+        this.productPricingSnapshotService = productPricingSnapshotService;
     }
 
     @Override
@@ -64,12 +68,19 @@ public class ProductsConverterServiceImpl
             criticalStock = stockSource.stream().mapToInt(org.monostudio.jpa.entities.ProductVariant::getStockCritical).sum();
         }
 
+        var pricing = productPricingSnapshotService.calculate(source);
+
         ProductPojo target = ProductPojo.builder()
             .id(source.getId())
             .name(source.getName())
             .barcode(source.getBarcode())
-
-            .price(source.getPrice())
+            .price(pricing.currentPrice())
+            .originalPrice(pricing.originalPrice())
+            .currentPrice(pricing.currentPrice())
+            .discountPercent(pricing.discountPercent())
+            .hasDiscount(pricing.hasDiscount())
+            .discountActiveFrom(pricing.activeFrom())
+            .discountActiveUntil(pricing.activeUntil())
             .description(source.getDescription())
             .currentStock(currentStock)
             .reservedStock(reservedStock)

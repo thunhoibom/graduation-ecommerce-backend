@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,14 +26,27 @@ import jakarta.persistence.EntityNotFoundException;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/account/orders")
 @Tag(name = "My Orders")
 @PreAuthorize("isAuthenticated()")
 public class AccountOrdersController {
+    private static final String STATUS_PENDING = "PENDING";
+    private static final String STATUS_CONFIRMED = "CONFIRMED";
+    private static final String STATUS_PROCESSING = "PROCESSING";
+    private static final String STATUS_READY_TO_PICK = "READY_TO_PICK";
+    private static final String STATUS_CANCELLED = "CANCELLED";
+    private static final String STATUS_CANCELLATION_REQUESTED = "CANCELLATION_REQUESTED";
+    private static final String PAYMENT_UNPAID = "UNPAID";
+    private static final String PAYMENT_EXPIRED = "EXPIRED";
+    private static final String PAYMENT_CANCELLED = "PAYMENT_CANCELLED";
+    private static final Set<String> FREE_CANCEL_FULFILLMENT = Set.of(STATUS_PENDING, STATUS_CONFIRMED);
+    private static final Set<String> REQUEST_CANCEL_FULFILLMENT = Set.of(STATUS_PROCESSING, STATUS_READY_TO_PICK);
+    private static final Set<String> FREE_CANCEL_PAYMENT = Set.of(PAYMENT_UNPAID, PAYMENT_EXPIRED, PAYMENT_CANCELLED);
+
     private final OrdersRepository ordersRepository;
     private final OrdersConverterService ordersConverterService;
     private final CustomersRepository customersRepository;
@@ -144,6 +158,62 @@ public class AccountOrdersController {
         }
 
         return ordersConverterService.convertToPojo(order);
+    }
+
+    @PostMapping("/{buyOrder}/cancel")
+    @Operation(summary = "Cancel order by customer policy (free cancel / cancellation request / locked)")
+    public OrderPojo cancelMyOrder(@PathVariable Long buyOrder, Principal principal)
+        throws EntityNotFoundException, UserNotFoundException {
+        Customer customer = resolveCustomer(principal);
+        org.monostudio.jpa.entities.Order order =
+            ordersRepository.findByIdWithDetails(buyOrder)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + buyOrder));
+
+        String userEmail = customer.getPerson().getEmail();
+        String orderEmail = order.getCustomer().getPerson().getEmail();
+        if (userEmail == null || !userEmail.equalsIgnoreCase(orderEmail)) {
+            throw new EntityNotFoundException("Order not found: " + buyOrder);
+        }
+
+        String fulfillment = normalizeFulfillment(order.getFulfillmentStatus());
+        String payment = normalizePayment(order.getPaymentStatus());
+
+        if (FREE_CANCEL_FULFILLMENT.contains(fulfillment) && FREE_CANCEL_PAYMENT.contains(payment)) {
+            ordersRepository.setFulfillmentStatus(order.getId(), STATUS_CANCELLED);
+        } else if (REQUEST_CANCEL_FULFILLMENT.contains(fulfillment)) {
+            ordersRepository.setFulfillmentStatus(order.getId(), STATUS_CANCELLATION_REQUESTED);
+        } else {
+            throw new jakarta.persistence.EntityNotFoundException(
+                "Order cannot be cancelled at fulfillment status: " + fulfillment
+            );
+        }
+
+        org.monostudio.jpa.entities.Order refreshed =
+            ordersRepository.findByIdWithDetails(buyOrder)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + buyOrder));
+        return ordersConverterService.convertToPojo(refreshed);
+    }
+
+    private String normalizeFulfillment(String status) {
+        if (status == null) {
+            return STATUS_PENDING;
+        }
+        return switch (status.toUpperCase()) {
+            case "DELIVERY_ON_ROUTE" -> "DELIVERING";
+            case "DELIVERY_COMPLETE" -> "DELIVERED";
+            case "DELIVERY_CANCELLED" -> STATUS_CANCELLED;
+            default -> status.toUpperCase();
+        };
+    }
+
+    private String normalizePayment(String status) {
+        if (status == null) {
+            return PAYMENT_UNPAID;
+        }
+        return switch (status.toUpperCase()) {
+            case PAYMENT_CANCELLED -> PAYMENT_EXPIRED;
+            default -> status.toUpperCase();
+        };
     }
 
     /**

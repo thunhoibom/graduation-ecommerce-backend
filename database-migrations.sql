@@ -193,6 +193,26 @@ VALUES
     ('Giao hàng hỏa tốc',    80000, NULL,   0, 0, TRUE)
 ON CONFLICT (shipping_method_name) DO NOTHING;
 
+-- ============================================================
+-- 10. Orders — drop legacy status FK columns
+-- ============================================================
+-- The application now uses textual statuses:
+--   - fulfillment_status
+--   - payment_status
+-- Legacy FK columns (order_status_id/payment_status_id) can break inserts
+-- when left as NOT NULL in existing databases.
+ALTER TABLE orders
+    DROP COLUMN IF EXISTS order_status_id;
+
+ALTER TABLE orders
+    DROP COLUMN IF EXISTS payment_status_id;
+
+-- ============================================================
+-- 11. Promotion Rules — scope for pricing separation
+-- ============================================================
+ALTER TABLE promotion_rules
+    ADD COLUMN IF NOT EXISTS rule_scope VARCHAR(20) NOT NULL DEFAULT 'CART';
+
 COMMIT;
 
 -- ============================================================

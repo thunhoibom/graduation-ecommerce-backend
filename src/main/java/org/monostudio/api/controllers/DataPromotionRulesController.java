@@ -18,6 +18,7 @@ import org.monostudio.config.cache.CacheNames;
 import org.monostudio.jpa.entities.PromotionRule;
 import org.monostudio.jpa.entities.PromotionRuleAction;
 import org.monostudio.jpa.entities.PromotionRuleCondition;
+import org.monostudio.jpa.entities.PromotionScope;
 import org.monostudio.jpa.repositories.PromotionRulesRepository;
 
 import java.util.List;
@@ -51,6 +52,9 @@ public class DataPromotionRulesController {
     @PreAuthorize("hasAuthority('discountCodes:create')")
     @CacheEvict(cacheNames = { CacheNames.ACTIVE_PROMOTION_RULES, CacheNames.PUBLIC_DISCOUNT_VALIDATION }, allEntries = true)
     public PromotionRule create(@RequestBody PromotionRule body) {
+        if (body.getScope() == null) {
+            body.setScope(PromotionScope.CART);
+        }
         wireChildren(body);
         body.setId(null);
         return promotionRulesRepository.saveAndFlush(body);

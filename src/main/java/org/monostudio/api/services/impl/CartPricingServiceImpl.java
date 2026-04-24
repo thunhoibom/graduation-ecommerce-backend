@@ -15,11 +15,13 @@ import org.monostudio.api.models.DiscountValidationResult;
 import org.monostudio.api.services.ActivePromotionRulesService;
 import org.monostudio.api.services.CartPricingService;
 import org.monostudio.api.services.DiscountService;
+import org.monostudio.api.services.ProductPricingSnapshotService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.CartItem;
 import org.monostudio.jpa.entities.CartSession;
 import org.monostudio.jpa.entities.Customer;
 import org.monostudio.jpa.entities.ProductCategory;
+import org.monostudio.jpa.entities.PromotionScope;
 import org.monostudio.jpa.entities.PromotionRule;
 import org.monostudio.jpa.repositories.CartSessionsRepository;
 import org.monostudio.jpa.repositories.CustomersRepository;
@@ -45,6 +47,7 @@ public class CartPricingServiceImpl implements CartPricingService {
     private final ActivePromotionRulesService activePromotionRulesService;
     private final PromotionRuleEngine promotionRuleEngine;
     private final DiscountService discountService;
+    private final ProductPricingSnapshotService productPricingSnapshotService;
     private final ObjectMapper objectMapper;
 
     private final int maxPromotionStack;
@@ -56,6 +59,7 @@ public class CartPricingServiceImpl implements CartPricingService {
         ActivePromotionRulesService activePromotionRulesService,
         PromotionRuleEngine promotionRuleEngine,
         DiscountService discountService,
+        ProductPricingSnapshotService productPricingSnapshotService,
         ObjectMapper objectMapper,
         @Value("${monostudio.pricing.max-promotion-stack:2}") int maxPromotionStack
     ) {
@@ -64,6 +68,7 @@ public class CartPricingServiceImpl implements CartPricingService {
         this.activePromotionRulesService = activePromotionRulesService;
         this.promotionRuleEngine = promotionRuleEngine;
         this.discountService = discountService;
+        this.productPricingSnapshotService = productPricingSnapshotService;
         this.objectMapper = objectMapper;
         this.maxPromotionStack = maxPromotionStack;
     }
@@ -92,7 +97,9 @@ public class CartPricingServiceImpl implements CartPricingService {
         PricingFacts facts = buildFacts(cart, items, subtotal, customerId);
 
         List<PromotionRule> active = activePromotionRulesService.loadActiveRules();
-        List<PromotionRule> matched = promotionRuleEngine.findMatchingRules(active, facts);
+        List<PromotionRule> matched = promotionRuleEngine.findMatchingRules(active, facts).stream()
+            .filter(this::isCheckoutScopedRule)
+            .toList();
         PromotionConflictResolver resolver = new PromotionConflictResolver(maxPromotionStack);
         List<PromotionRule> selected = resolver.resolve(matched);
 
@@ -183,7 +190,8 @@ public class CartPricingServiceImpl implements CartPricingService {
             if (item.getVariant() == null || item.getVariant().getProduct() == null) {
                 continue;
             }
-            int unit = item.getVariant().getProduct().getPrice() + item.getVariant().getPriceModifier();
+            var productPricing = productPricingSnapshotService.calculate(item.getVariant().getProduct());
+            int unit = productPricing.currentPrice() + item.getVariant().getPriceModifier();
             sum += unit * item.getQuantity();
         }
         return sum;
@@ -236,5 +244,13 @@ public class CartPricingServiceImpl implements CartPricingService {
             .envHourOfDay(now.getHour())
             .now(now)
             .build();
+    }
+
+    private boolean isCheckoutScopedRule(PromotionRule rule) {
+        if (rule.getScope() == null) {
+            // Legacy rules created before scope support are treated as cart-scope.
+            return true;
+        }
+        return rule.getScope() == PromotionScope.CART || rule.getScope() == PromotionScope.SHIPPING;
     }
 }

@@ -12,6 +12,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -72,6 +74,11 @@ public class PromotionRule implements DBEntity {
     @Column(name = "rule_active", nullable = false)
     @Builder.Default
     private boolean active = true;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rule_scope", nullable = false, length = 20)
+    @Builder.Default
+    private PromotionScope scope = PromotionScope.CART;
 
     @Column(name = "rule_active_from")
     private LocalDateTime activeFrom;

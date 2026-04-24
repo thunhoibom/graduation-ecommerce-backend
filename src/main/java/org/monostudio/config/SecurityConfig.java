@@ -80,6 +80,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/public/cart", "/api/public/cart/**").permitAll()
                 .requestMatchers("/api/public/discount/**").permitAll()
                 .requestMatchers("/api/public/shipping/**").permitAll()
+                .requestMatchers("/api/public/tracking/**").permitAll()
                 .requestMatchers("/api/public/checkout/**").permitAll()
                 .requestMatchers("/api/data/notifications/stream").permitAll()
                 .requestMatchers("/api/public/categories", "/api/public/categories/**").permitAll()

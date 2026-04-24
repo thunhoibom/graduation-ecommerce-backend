@@ -41,7 +41,7 @@ public class ProductsPredicateServiceImpl
                         predicate.and(basePath.barcode.eq(stringValue));
                         break;
                     case "name":
-                        predicate.and(basePath.name.eq(stringValue));
+                        predicate.and(basePath.name.likeIgnoreCase("%" + stringValue + "%"));
                         break;
                     case "barcodeLike":
                         predicate.and(basePath.barcode.likeIgnoreCase("%" + stringValue + "%"));

@@ -10,6 +10,7 @@ import static lombok.AccessLevel.PRIVATE;
 @NoArgsConstructor(access = PRIVATE)
 public final class Constants {
     public static final String ORDER_FULFILLMENT_STATUS_PENDING = "PENDING";
+    public static final String ORDER_FULFILLMENT_STATUS_PROCESSING = "PROCESSING";
     public static final String ORDER_FULFILLMENT_STATUS_CONFIRMED = "CONFIRMED";
     public static final String ORDER_FULFILLMENT_STATUS_REJECTED = "REJECTED";
     public static final String ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE = "DELIVERY_ON_ROUTE";

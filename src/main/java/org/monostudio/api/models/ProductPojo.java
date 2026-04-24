@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.time.LocalDateTime;
 import java.util.Collection;
 
 import static com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY;
@@ -28,8 +29,24 @@ public class ProductPojo {
     private String barcode;
     @JsonInclude(NON_EMPTY)
     private String description;
+    /**
+     * @deprecated Legacy alias for currentPrice. Use currentPrice/originalPrice instead.
+     */
+    @Deprecated
     @NotNull
     private Integer price;
+    /** List/base price before promotional pricing is applied. */
+    private Integer originalPrice;
+    /** Current effective selling price at request time. */
+    private Integer currentPrice;
+    /** Rounded percentage discount from originalPrice to currentPrice. */
+    private Integer discountPercent;
+    /** Whether a promotion is currently active for this product. */
+    private Boolean hasDiscount;
+    /** Active window start of applied promotion, if any. */
+    private LocalDateTime discountActiveFrom;
+    /** Active window end of applied promotion, if any. */
+    private LocalDateTime discountActiveUntil;
     /**
      * Aggregate stock across active variants.
      * Read-only for variant-based products.

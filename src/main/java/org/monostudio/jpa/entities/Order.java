@@ -75,10 +75,12 @@ public class Order
     @JoinColumn(name = "payment_type_id", updatable = false, nullable = false)
     @ManyToOne(optional = false, cascade = CascadeType.REFRESH, fetch = FetchType.LAZY)
     private PaymentType paymentType;
-    @Column(name = "fulfillment_status", nullable = false)
-    private String fulfillmentStatus;
-    @Column(name = "payment_status", nullable = false)
-    private String paymentStatus;
+    @Builder.Default
+    @Column(name = "fulfillment_status")
+    private String fulfillmentStatus = "PENDING";
+    @Builder.Default
+    @Column(name = "payment_status")
+    private String paymentStatus = "UNPAID";
     @JoinColumn(name = "billing_type_id", updatable = false, nullable = false)
     @ManyToOne(optional = false, cascade = CascadeType.REFRESH, fetch = FetchType.LAZY)
     private BillingType billingType;

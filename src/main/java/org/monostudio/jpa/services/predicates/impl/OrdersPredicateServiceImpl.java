@@ -32,10 +32,10 @@ public class OrdersPredicateServiceImpl
                         break;
                     case "statusName":
                     case "fulfillmentStatus":
-                        predicate.and(basePath.fulfillmentStatus.eq(stringValue));
+                        predicate.and(basePath.fulfillmentStatus.eq(normalizeFulfillmentStatus(stringValue)));
                         break;
                     case "paymentStatus":
-                        predicate.and(basePath.paymentStatus.eq(stringValue));
+                        predicate.and(basePath.paymentStatus.eq(normalizePaymentStatus(stringValue)));
                         break;
                     case "token":
                         predicate.and(basePath.transactionToken.eq(stringValue));
@@ -51,5 +51,29 @@ public class OrdersPredicateServiceImpl
         }
 
         return predicate;
+    }
+
+    private String normalizeFulfillmentStatus(String status) {
+        if (status == null) {
+            return null;
+        }
+        String normalized = status.trim().toUpperCase();
+        return switch (normalized) {
+            case "DELIVERING" -> "DELIVERY_ON_ROUTE";
+            case "DELIVERED" -> "DELIVERY_COMPLETE";
+            case "CANCELLED" -> "DELIVERY_CANCELLED";
+            default -> normalized;
+        };
+    }
+
+    private String normalizePaymentStatus(String status) {
+        if (status == null) {
+            return null;
+        }
+        String normalized = status.trim().toUpperCase();
+        if ("EXPIRED".equals(normalized)) {
+            return "PAYMENT_CANCELLED";
+        }
+        return normalized;
     }
 }

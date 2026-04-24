@@ -114,9 +114,9 @@ public class OrdersConverterServiceImpl
         PersonPojo customer = customersConverterService.convertToPojo(source.getCustomer());
         target.setCustomer(customer);
 
-        target.setStatus(source.getFulfillmentStatus());
-        target.setFulfillmentStatus(source.getFulfillmentStatus());
-        target.setPaymentStatus(source.getPaymentStatus());
+        target.setFulfillmentStatus(normalizeFulfillmentStatus(source.getFulfillmentStatus()));
+        target.setStatus(normalizeFulfillmentStatus(source.getFulfillmentStatus()));
+        target.setPaymentStatus(normalizePaymentStatus(source.getPaymentStatus()));
         target.setPaymentType(source.getPaymentType().getName());
         target.setBillingType(source.getBillingType().getName());
 
@@ -275,20 +275,19 @@ public class OrdersConverterServiceImpl
             }
 
             final String finalPaymentType = normalizedName;
-            
+
             // 1. Try finding by name (case-insensitive)
             List<PaymentType> allTypes = paymentTypesRepository.findAll();
             Optional<PaymentType> found = allTypes.stream()
                 .filter(pt -> pt.getName().equalsIgnoreCase(finalPaymentType))
                 .findFirst();
-            
+
             if (found.isPresent()) {
                 target.setPaymentType(found.get());
                 return;
             }
 
             // 2. If name search failed but it's a common type, try finding by known IDs
-            // (Mapping based on data.sql: 1=VNPAY, 2=COD, 3=MOMO if present)
             Long targetId = null;
             if ("VNPAY".equals(finalPaymentType)) {
                 targetId = Long.valueOf(1L);
@@ -484,5 +483,27 @@ public class OrdersConverterServiceImpl
             address.getPostalCode(),
             address.getNotes()
         );
+    }
+
+    private String normalizeFulfillmentStatus(String status) {
+        if (status == null) {
+            return ORDER_FULFILLMENT_STATUS_PENDING;
+        }
+        return switch (status) {
+            case "DELIVERY_ON_ROUTE" -> "DELIVERING";
+            case "DELIVERY_COMPLETE" -> "DELIVERED";
+            case "DELIVERY_CANCELLED" -> "CANCELLED";
+            default -> status;
+        };
+    }
+
+    private String normalizePaymentStatus(String status) {
+        if (status == null) {
+            return ORDER_PAYMENT_STATUS_UNPAID;
+        }
+        if ("PAYMENT_CANCELLED".equals(status)) {
+            return "EXPIRED";
+        }
+        return status;
     }
 }

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.ImagePojo;
 import org.monostudio.api.models.ProductVariantPojo;
+import org.monostudio.api.services.ProductPricingSnapshotService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Image;
 import org.monostudio.jpa.entities.Product;
@@ -27,16 +28,19 @@ public class ProductVariantsConverterServiceImpl
     private final ProductsRepository productsRepository;
     private final ImagesRepository imagesRepository;
     private final ImagesConverterService imagesConverterService;
+    private final ProductPricingSnapshotService productPricingSnapshotService;
 
     @Autowired
     public ProductVariantsConverterServiceImpl(
         ProductsRepository productsRepository,
         ImagesRepository imagesRepository,
-        ImagesConverterService imagesConverterService
+        ImagesConverterService imagesConverterService,
+        ProductPricingSnapshotService productPricingSnapshotService
     ) {
         this.productsRepository = productsRepository;
         this.imagesRepository = imagesRepository;
         this.imagesConverterService = imagesConverterService;
+        this.productPricingSnapshotService = productPricingSnapshotService;
     }
 
 
@@ -61,10 +65,11 @@ public class ProductVariantsConverterServiceImpl
 
         Product product = source.getProduct();
         if (product != null) {
+            var pricing = productPricingSnapshotService.calculate(product);
             target.setProductBarcode(product.getBarcode());
             target.setProductName(product.getName());
-            target.setProductBasePrice(product.getPrice());
-            target.setFinalPrice(product.getPrice() + source.getPriceModifier());
+            target.setProductBasePrice(pricing.currentPrice());
+            target.setFinalPrice(pricing.currentPrice() + source.getPriceModifier());
         }
 
         // Map images
