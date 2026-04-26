@@ -10,8 +10,8 @@ import static lombok.AccessLevel.PRIVATE;
 @NoArgsConstructor(access = PRIVATE)
 public final class Constants {
     public static final String ORDER_FULFILLMENT_STATUS_PENDING = "PENDING";
-    public static final String ORDER_FULFILLMENT_STATUS_PROCESSING = "PROCESSING";
     public static final String ORDER_FULFILLMENT_STATUS_CONFIRMED = "CONFIRMED";
+    public static final String ORDER_FULFILLMENT_STATUS_PROCESSING = "PROCESSING";
     public static final String ORDER_FULFILLMENT_STATUS_REJECTED = "REJECTED";
     public static final String ORDER_FULFILLMENT_STATUS_DELIVERY_ON_ROUTE = "DELIVERY_ON_ROUTE";
     public static final String ORDER_FULFILLMENT_STATUS_DELIVERY_FAILED = "DELIVERY_FAILED";
@@ -33,6 +33,9 @@ public final class Constants {
     public static final String VNPAY_RESPONSE_CODE_PARAM = "vnp_ResponseCode";
     public static final String MOMO_ORDER_ID_PARAM = "orderId";
     public static final String MOMO_RESULT_CODE_PARAM = "resultCode";
+    public static final String PAYOS_ORDER_CODE_PARAM = "orderCode";
+    public static final String PAYOS_CODE_PARAM = "code";
+    public static final String PAYOS_SUCCESS_PARAM = "success";
     public static final String AUTHORITY_CHECKOUT = "checkout";
     public static final String JWT_CLAIM_AUTHORITIES = "authorities";
     public static final String JWT_PREFIX = "Bearer ";

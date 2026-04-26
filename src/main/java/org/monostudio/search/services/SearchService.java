@@ -185,7 +185,7 @@ public class SearchService {
                 .collect(Collectors.toCollection(ArrayList::new));
 
         return WeatherCategoryRecommendationPojo.builder()
-                .sectionTitle("Goi y theo thoi tiet hom nay")
+                .sectionTitle("Gợi ý theo thời tiết hôm nay")
                 .weatherContext(weatherContext)
                 .items(items)
                 .build();

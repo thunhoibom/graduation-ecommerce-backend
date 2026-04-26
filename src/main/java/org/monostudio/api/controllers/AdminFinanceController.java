@@ -91,10 +91,12 @@ public class AdminFinanceController {
     public DataPagePojo<FinanceCallbackLogItemPojo> getCallbackLogs(
         @RequestParam(required = false) Long orderId,
         @RequestParam(required = false) String result,
+        @RequestParam @Nullable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam @Nullable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
         @RequestParam(defaultValue = "1") int page,
         @RequestParam(defaultValue = "20") int size
     ) {
-        return financeOperationsService.getCallbackLogs(orderId, result, page, size);
+        return financeOperationsService.getCallbackLogs(orderId, result, from, to, page, size);
     }
 
     @GetMapping("/reconciliation/summary")

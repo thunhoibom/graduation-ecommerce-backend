@@ -14,6 +14,10 @@ import java.time.Instant;
 public class FinanceReconciliationMismatchPojo {
     private String mismatchKey;
     private Long orderId;
+    private String orderStatus;
+    private String paymentStatus;
+    private Long orderTotal;
+    private String transactionToken;
     private String type;
     private String description;
     private String severity;

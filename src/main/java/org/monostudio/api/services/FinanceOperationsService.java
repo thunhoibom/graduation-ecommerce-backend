@@ -40,6 +40,8 @@ public interface FinanceOperationsService {
     DataPagePojo<FinanceCallbackLogItemPojo> getCallbackLogs(
         Long orderId,
         String result,
+        LocalDate from,
+        LocalDate to,
         int page,
         int size
     );

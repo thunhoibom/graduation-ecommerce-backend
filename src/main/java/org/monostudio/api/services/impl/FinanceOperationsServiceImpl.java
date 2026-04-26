@@ -49,7 +49,8 @@ public class FinanceOperationsServiceImpl
 
     private static final Set<String> SUCCESS_ORDER_STATUSES = Set.of(
         Constants.ORDER_FULFILLMENT_STATUS_CONFIRMED,
-        Constants.ORDER_FULFILLMENT_STATUS_COMPLETED
+        Constants.ORDER_FULFILLMENT_STATUS_COMPLETED,
+        "DELIVERED"
     );
 
     private static final Set<String> FAILED_ORDER_STATUSES = Set.of(
@@ -160,12 +161,19 @@ public class FinanceOperationsServiceImpl
     public DataPagePojo<FinanceCallbackLogItemPojo> getCallbackLogs(
         Long orderId,
         String result,
+        LocalDate from,
+        LocalDate to,
         int page,
         int size
     ) {
+        Instant fromInstant = toInstant(from, true);
+        Instant toInstant = toInstant(to, false);
         List<FinanceCallbackLogItemPojo> filtered = paymentCallbackLogRepository
             .findAllByOrderByProcessedAtDesc(PageRequest.of(0, 2000))
             .stream()
+            .filter(log -> log.getProcessedAt() != null
+                && !log.getProcessedAt().isBefore(fromInstant)
+                && !log.getProcessedAt().isAfter(toInstant))
             .filter(log -> orderId == null || Objects.equals(log.getOrderId(), orderId))
             .filter(log -> !StringUtils.hasText(result) || log.getResult().name().equalsIgnoreCase(result))
             .map(this::toCallbackItem)
@@ -176,10 +184,8 @@ public class FinanceOperationsServiceImpl
 
     @Override
     public FinanceReconciliationSummaryPojo getReconciliationSummary(LocalDate from, LocalDate to) {
-        List<FinancePaymentItemPojo> payments = getPayments(null, null, null, from, to, 1, 10000).getItems()
-            .stream().toList();
-        List<FinanceRefundOperationPojo> refunds = getRefundOperations(null, null, from, to, 1, 10000).getItems()
-            .stream().toList();
+        List<FinancePaymentItemPojo> payments = listPayments(from, to, null, null, null);
+        List<FinanceRefundOperationPojo> refunds = listRefundOperations(from, to, null, null);
         List<FinanceReconciliationMismatchPojo> mismatches = buildMismatches(from, to);
 
         long grossPaid = payments.stream()
@@ -309,11 +315,12 @@ public class FinanceOperationsServiceImpl
             PaymentCallbackLog callback = callbackByToken.get(order.getTransactionToken());
             String callbackResult = callback != null ? callback.getResult().name() : null;
 
-            if (callback != null && callback.getAuthorizedAmount() != null
+            if (callback != null
+                && callback.getResult() == PaymentCallbackLog.CallbackResult.SUCCESS
+                && callback.getAuthorizedAmount() != null
                 && callback.getAuthorizedAmount() != order.getTotalValue()) {
-                result.add(FinanceReconciliationMismatchPojo.builder()
+                result.add(baseMismatch(order)
                     .mismatchKey(keyFor(order.getId(), "amount"))
-                    .orderId(order.getId())
                     .type("AMOUNT_MISMATCH")
                     .description("Authorized amount " + callback.getAuthorizedAmount()
                         + " != order total " + order.getTotalValue())
@@ -323,9 +330,8 @@ public class FinanceOperationsServiceImpl
 
             if (callback != null && "SUCCESS".equalsIgnoreCase(callbackResult)
                 && FAILED_ORDER_STATUSES.contains(paymentStatus)) {
-                result.add(FinanceReconciliationMismatchPojo.builder()
+                result.add(baseMismatch(order)
                     .mismatchKey(keyFor(order.getId(), "callback-success-order-failed"))
-                    .orderId(order.getId())
                     .type("STATUS_MISMATCH")
                     .description("Gateway callback is SUCCESS but order is in failed/cancelled payment status.")
                     .severity("HIGH")
@@ -336,9 +342,8 @@ public class FinanceOperationsServiceImpl
                 && ("ABORTED".equalsIgnoreCase(callbackResult) || "GATEWAY_ERROR".equalsIgnoreCase(callbackResult))
                 && SUCCESS_ORDER_STATUSES.contains(orderStatus)
                 && Constants.ORDER_PAYMENT_STATUS_PAID.equals(paymentStatus)) {
-                result.add(FinanceReconciliationMismatchPojo.builder()
+                result.add(baseMismatch(order)
                     .mismatchKey(keyFor(order.getId(), "callback-failed-order-success"))
-                    .orderId(order.getId())
                     .type("STATUS_MISMATCH")
                     .description("Gateway callback indicates failed/aborted but order status is paid/completed.")
                     .severity("HIGH")
@@ -346,9 +351,8 @@ public class FinanceOperationsServiceImpl
             }
 
             if (order.getTotalRefundedAmount() > order.getTotalValue()) {
-                result.add(FinanceReconciliationMismatchPojo.builder()
+                result.add(baseMismatch(order)
                     .mismatchKey(keyFor(order.getId(), "refund-overflow"))
-                    .orderId(order.getId())
                     .type("REFUND_OVERFLOW")
                     .description("Total refunded amount exceeds order total.")
                     .severity("CRITICAL")
@@ -357,9 +361,8 @@ public class FinanceOperationsServiceImpl
 
             RefundRetryQueue retryQueue = retryByOrder.get(order.getId());
             if (retryQueue != null && retryQueue.getStatus() == RefundRetryQueue.RefundStatus.FAILED_PERMANENT) {
-                result.add(FinanceReconciliationMismatchPojo.builder()
+                result.add(baseMismatch(order)
                     .mismatchKey(keyFor(order.getId(), "refund-permanent-failure"))
-                    .orderId(order.getId())
                     .type("REFUND_PERMANENT_FAILURE")
                     .description("Refund retry queue reached FAILED_PERMANENT. Manual accounting action is required.")
                     .severity("CRITICAL")
@@ -404,7 +407,79 @@ public class FinanceOperationsServiceImpl
             return Map.of();
         }
         return paymentCallbackLogRepository.findByTokenIn(tokens).stream()
-            .collect(Collectors.toMap(PaymentCallbackLog::getToken, Function.identity(), (left, right) -> right));
+            .collect(Collectors.toMap(
+                PaymentCallbackLog::getToken,
+                Function.identity(),
+                (left, right) -> compareByProcessedAtThenId(left, right) >= 0 ? left : right
+            ));
+    }
+
+    private int compareByProcessedAtThenId(PaymentCallbackLog left, PaymentCallbackLog right) {
+        Instant leftTime = left.getProcessedAt();
+        Instant rightTime = right.getProcessedAt();
+        if (leftTime != null && rightTime != null) {
+            int compared = leftTime.compareTo(rightTime);
+            if (compared != 0) {
+                return compared;
+            }
+        } else if (leftTime != null) {
+            return 1;
+        } else if (rightTime != null) {
+            return -1;
+        }
+        Long leftId = left.getId();
+        Long rightId = right.getId();
+        if (leftId == null && rightId == null) return 0;
+        if (leftId == null) return -1;
+        if (rightId == null) return 1;
+        return leftId.compareTo(rightId);
+    }
+
+    private List<FinancePaymentItemPojo> listPayments(
+        LocalDate from,
+        LocalDate to,
+        Long orderId,
+        String paymentStatus,
+        String orderStatus
+    ) {
+        Instant fromInstant = toInstant(from, true);
+        Instant toInstant = toInstant(to, false);
+        List<Order> orders = ordersRepository.findAll();
+        Map<String, PaymentCallbackLog> callbackByToken = getCallbackByToken(orders);
+
+        return orders.stream()
+            .filter(order -> order.getDate() != null
+                && !order.getDate().isBefore(fromInstant)
+                && !order.getDate().isAfter(toInstant))
+            .filter(order -> orderId == null || Objects.equals(order.getId(), orderId))
+            .map(order -> toPaymentItem(order, callbackByToken.get(order.getTransactionToken())))
+            .filter(item -> !StringUtils.hasText(paymentStatus)
+                || item.getPaymentStatus().equalsIgnoreCase(paymentStatus))
+            .filter(item -> !StringUtils.hasText(orderStatus)
+                || (item.getOrderStatus() != null && item.getOrderStatus().equalsIgnoreCase(orderStatus)))
+            .sorted(Comparator.comparing(FinancePaymentItemPojo::getProcessedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(FinancePaymentItemPojo::getOrderId, Comparator.nullsLast(Comparator.reverseOrder())))
+            .collect(Collectors.toList());
+    }
+
+    private List<FinanceRefundOperationPojo> listRefundOperations(
+        LocalDate from,
+        LocalDate to,
+        Long orderId,
+        String status
+    ) {
+        Instant fromInstant = toInstant(from, true);
+        Instant toInstant = toInstant(to, false);
+        return returnRequestsRepository.findAll().stream()
+            .filter(request -> request.getDate() != null
+                && !request.getDate().isBefore(fromInstant)
+                && !request.getDate().isAfter(toInstant))
+            .filter(request -> orderId == null || Objects.equals(request.getOrder().getId(), orderId))
+            .filter(request -> !StringUtils.hasText(status)
+                || request.getStatus().name().equalsIgnoreCase(status))
+            .map(this::toRefundItem)
+            .sorted(Comparator.comparing(FinanceRefundOperationPojo::getLastModified, Comparator.nullsLast(Comparator.reverseOrder())))
+            .collect(Collectors.toList());
     }
 
     private FinancePaymentItemPojo toPaymentItem(Order order, PaymentCallbackLog callback) {
@@ -486,6 +561,15 @@ public class FinanceOperationsServiceImpl
 
     private String keyFor(Long orderId, String typeSuffix) {
         return "order-" + orderId + "-" + typeSuffix.toLowerCase(Locale.ROOT);
+    }
+
+    private FinanceReconciliationMismatchPojo.FinanceReconciliationMismatchPojoBuilder baseMismatch(Order order) {
+        return FinanceReconciliationMismatchPojo.builder()
+            .orderId(order.getId())
+            .orderStatus(order.getFulfillmentStatus())
+            .paymentStatus(order.getPaymentStatus())
+            .orderTotal((long) order.getTotalValue())
+            .transactionToken(order.getTransactionToken());
     }
 
     private Instant toInstant(LocalDate date, boolean startOfDay) {

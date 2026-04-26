@@ -82,7 +82,7 @@ public interface OrdersRepository
         @Param("to") Instant to);
 
     /**
-     * Revenue broken down by day.
+     * Revenue broken down by day (recognized ecommerce revenue).
      * Uses native SQL for DATE() truncation — PostgreSQL compatible.
      */
     @Query(value = """
@@ -92,6 +92,8 @@ public interface OrdersRepository
         FROM   orders o
         WHERE  o.order_date >= :from
           AND  o.order_date <= :to
+          AND  o.payment_status = 'PAID'
+          AND  o.fulfillment_status IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE', 'DELIVERED')
         GROUP  BY DATE(o.order_date)
         ORDER  BY periodDate ASC
         """, nativeQuery = true)
@@ -100,7 +102,8 @@ public interface OrdersRepository
         @Param("to") Instant to);
 
     /**
-     * Revenue broken down by week (ISO week, starts Monday).
+     * Revenue broken down by week (recognized ecommerce revenue).
+     * ISO week, starts Monday.
      * PostgreSQL compatible.
      */
     @Query(value = """
@@ -110,6 +113,8 @@ public interface OrdersRepository
         FROM   orders o
         WHERE  o.order_date >= :from
           AND  o.order_date <= :to
+          AND  o.payment_status = 'PAID'
+          AND  o.fulfillment_status IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE', 'DELIVERED')
         GROUP  BY DATE(DATE_TRUNC('week', o.order_date))
         ORDER  BY periodDate ASC
         """, nativeQuery = true)
@@ -118,7 +123,7 @@ public interface OrdersRepository
         @Param("to") Instant to);
 
     /**
-     * Revenue broken down by month.
+     * Revenue broken down by month (recognized ecommerce revenue).
      * PostgreSQL compatible.
      */
     @Query(value = """
@@ -128,6 +133,8 @@ public interface OrdersRepository
         FROM   orders o
         WHERE  o.order_date >= :from
           AND  o.order_date <= :to
+          AND  o.payment_status = 'PAID'
+          AND  o.fulfillment_status IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE', 'DELIVERED')
         GROUP  BY DATE(DATE_TRUNC('month', o.order_date))
         ORDER  BY periodDate ASC
         """, nativeQuery = true)
@@ -151,7 +158,7 @@ public interface OrdersRepository
         WHERE  o.order_date >= :from
           AND  o.order_date <= :to
           AND  o.payment_status = 'PAID'
-          AND  o.fulfillment_status IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE')
+          AND  o.fulfillment_status IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE', 'DELIVERED')
         GROUP  BY p.product_id, p.product_name
         ORDER  BY unitsSold DESC
         LIMIT  :limit
@@ -173,7 +180,7 @@ public interface OrdersRepository
           AND  o.order_date >= :from
           AND  o.order_date <= :to
           AND  o.payment_status = 'PAID'
-          AND  o.fulfillment_status IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE')
+          AND  o.fulfillment_status IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE', 'DELIVERED')
         GROUP  BY od.product_variant_id
         """, nativeQuery = true)
     List<VariantSalesProjection> findVariantUnitsSold(
@@ -191,7 +198,7 @@ public interface OrdersRepository
         WHERE  o.customer.id = :customerId
           AND  od.product.id = :productId
           AND  o.paymentStatus = 'PAID'
-          AND  o.fulfillmentStatus IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE')
+          AND  o.fulfillmentStatus IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE', 'DELIVERED')
         """)
     boolean hasCompletedOrderWithProduct(
         @Param("customerId") Long customerId,

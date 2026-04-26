@@ -20,6 +20,8 @@ import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.services.CheckoutService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.payment.PaymentServiceException;
+import org.monostudio.payment.impl.payos.PayosPaymentServiceImpl;
+import vn.payos.model.webhooks.ConfirmWebhookResponse;
 
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
@@ -33,6 +35,9 @@ import static org.springframework.http.HttpStatus.SEE_OTHER;
 import static org.monostudio.config.Constants.AUTHORITY_CHECKOUT;
 import static org.monostudio.config.Constants.MOMO_ORDER_ID_PARAM;
 import static org.monostudio.config.Constants.MOMO_RESULT_CODE_PARAM;
+import static org.monostudio.config.Constants.PAYOS_CODE_PARAM;
+import static org.monostudio.config.Constants.PAYOS_ORDER_CODE_PARAM;
+import static org.monostudio.config.Constants.PAYOS_SUCCESS_PARAM;
 import static org.monostudio.config.Constants.VNPAY_TXN_REF_PARAM;
 import static org.monostudio.config.Constants.VNPAY_RESPONSE_CODE_PARAM;
 
@@ -134,10 +139,44 @@ public class PublicCheckoutController {
         return ResponseEntity.ok(acknowledgement);
     }
 
+    @PostMapping("/payos/confirm-webhook")
+    @Operation(summary = "Confirm PAYOS webhook URL for current payment channel")
+    public ConfirmWebhookResponse confirmPayosWebhook(@RequestBody Map<String, String> requestBody)
+        throws PaymentServiceException, BadInputException {
+        String webhookUrl = requestBody.get("webhookUrl");
+        if (webhookUrl == null || webhookUrl.isBlank()) {
+            throw new BadInputException("webhookUrl is required");
+        }
+
+        PaymentService paymentService = service.getPaymentService("PAYOS");
+        if (!(paymentService instanceof PayosPaymentServiceImpl payosService)) {
+            throw new PaymentServiceException("PAYOS payment service is not available");
+        }
+        return payosService.confirmWebhook(webhookUrl);
+
+
+    // Map<String, Object> response = new LinkedHashMap<>();
+    // response.put("code", "00");
+    // response.put("desc", "success");
+    // return ResponseEntity.ok(response);
+    }
+
     private String resolveToken(Map<String, String> transactionData) throws BadInputException {
         String token = transactionData.get(VNPAY_TXN_REF_PARAM);
         if (token == null || token.isBlank()) {
             token = transactionData.get(MOMO_ORDER_ID_PARAM);
+        }
+        if (token == null || token.isBlank()) {
+            token = transactionData.get(PAYOS_ORDER_CODE_PARAM);
+        }
+        if ((token == null || token.isBlank()) && transactionData.get("data") != null) {
+            String rawData = transactionData.get("data");
+            int index = rawData.indexOf("orderCode=");
+            if (index >= 0) {
+                int start = index + "orderCode=".length();
+                int end = rawData.indexOf(",", start);
+                token = end >= 0 ? rawData.substring(start, end).trim() : rawData.substring(start).trim();
+            }
         }
         if (token == null || token.isBlank()) {
             throw new BadInputException("No transaction token was provided");
@@ -154,6 +193,17 @@ public class PublicCheckoutController {
             String resultCode = transactionData.get(MOMO_RESULT_CODE_PARAM);
             return resultCode == null || !resultCode.equals("0");
         }
+        if ("PAYOS".equalsIgnoreCase(paymentType)) {
+            String responseCode = transactionData.get(PAYOS_CODE_PARAM);
+            if (responseCode != null && !responseCode.isBlank()) {
+                return !"00".equals(responseCode);
+            }
+            String success = transactionData.get(PAYOS_SUCCESS_PARAM);
+            if (success != null && !success.isBlank()) {
+                return !"true".equalsIgnoreCase(success);
+            }
+            return false;
+        }
         String fallbackCode = transactionData.getOrDefault(MOMO_RESULT_CODE_PARAM,
             transactionData.get(VNPAY_RESPONSE_CODE_PARAM));
         return fallbackCode == null || (!fallbackCode.equals("0") && !fallbackCode.equals("00"));
@@ -163,6 +213,13 @@ public class PublicCheckoutController {
         Map<String, String> normalized = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : transactionData.entrySet()) {
             normalized.put(entry.getKey(), entry.getValue() == null ? null : String.valueOf(entry.getValue()));
+        }
+        Object data = transactionData.get("data");
+        if (data instanceof Map<?, ?> nested) {
+            Object orderCode = nested.get(PAYOS_ORDER_CODE_PARAM);
+            if (orderCode != null) {
+                normalized.put(PAYOS_ORDER_CODE_PARAM, String.valueOf(orderCode));
+            }
         }
         return normalized;
     }

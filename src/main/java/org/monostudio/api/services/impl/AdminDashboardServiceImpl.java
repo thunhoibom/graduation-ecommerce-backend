@@ -19,10 +19,6 @@ import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_COMPLETED;
-import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_CONFIRMED;
-import static org.monostudio.config.Constants.ORDER_FULFILLMENT_STATUS_PROCESSING;
-
 @Transactional(readOnly = true)
 @Service
 public class AdminDashboardServiceImpl
@@ -56,18 +52,11 @@ public class AdminDashboardServiceImpl
         Instant fromInstant = toInstant(from, true);
         Instant toInstant = toInstant(to, false);
 
-        // Revenue from paid/confirmed + completed orders
-        long paidConfirmedRevenue = ordersRepository.sumRevenueByStatusAndDateBetween(
-            ORDER_FULFILLMENT_STATUS_CONFIRMED, fromInstant, toInstant);
-        long processingRevenue = ordersRepository.sumRevenueByStatusAndDateBetween(
-            ORDER_FULFILLMENT_STATUS_PROCESSING, fromInstant, toInstant);
-        long completedRevenue = ordersRepository.sumRevenueByStatusAndDateBetween(
-            ORDER_FULFILLMENT_STATUS_COMPLETED, fromInstant, toInstant);
-        long totalRevenue = paidConfirmedRevenue + processingRevenue + completedRevenue;
-
-        long totalOrders = ordersRepository.countByDateBetween(fromInstant, toInstant);
-
         Collection<RevenueStatPojo> revenueByPeriod = getRevenueByPeriod(from, to, "day");
+        long totalRevenue = revenueByPeriod.stream()
+            .mapToLong(RevenueStatPojo::getRevenue)
+            .sum();
+        long totalOrders = ordersRepository.countByDateBetween(fromInstant, toInstant);
         Collection<TopProductPojo> topProducts = getTopProducts(from, to, 10);
         Collection<OrderStatusCountPojo> statusBreakdown = getOrderStatusBreakdown(from, to);
         Collection<LowStockAlertPojo> lowStockAlerts = getLowStockAlerts();
