@@ -52,7 +52,6 @@ public interface VariantsBulkService {
     BulkOperationResult bulkUpdate(
         List<Long> ids,
         Integer priceModifier,
-        Integer currentStock,
         Boolean active
     );
 }

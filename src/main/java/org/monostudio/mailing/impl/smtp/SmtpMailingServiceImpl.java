@@ -16,6 +16,7 @@ import org.monostudio.mailing.MailingServiceException;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import java.time.Instant;
 
 @Service
 @Profile("smtp")
@@ -70,6 +71,18 @@ public class SmtpMailingServiceImpl implements MailingService {
         String subject = "[Admin] Yêu cầu trả hàng mới #" + request.getId();
         String text = "<p>Có yêu cầu trả hàng mới cần xử lý.</p>";
         sendEmail(properties.getOwnerEmail(), subject, text);
+    }
+
+    @Override
+    public void notifyCheckoutOtp(String email, Long orderId, String otpCode, Instant expiresAt) throws MailingServiceException {
+        String subject = "Ma OTP xac nhan don hang #" + orderId;
+        String text = "<div style='font-family:Arial,sans-serif;color:#333;'>"
+            + "<h3>Xac nhan dat hang</h3>"
+            + "<p>Ma OTP cua ban la: <b style='font-size:22px;letter-spacing:2px;'>" + otpCode + "</b></p>"
+            + "<p>Ma se het han luc: <b>" + expiresAt + "</b></p>"
+            + "<p>Neu ban khong thuc hien giao dich nay, vui long bo qua email.</p>"
+            + "</div>";
+        sendEmail(email, subject, text);
     }
 
     private void sendEmail(String to, String subject, String htmlContent) throws MailingServiceException {

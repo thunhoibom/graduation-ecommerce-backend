@@ -291,7 +291,6 @@ public class VariantsBulkServiceImpl implements VariantsBulkService {
     public BulkOperationResult bulkUpdate(
         List<Long> ids,
         Integer priceModifier,
-        Integer currentStock,
         Boolean active
     ) {
         if (ids == null || ids.isEmpty()) {
@@ -299,11 +298,11 @@ public class VariantsBulkServiceImpl implements VariantsBulkService {
                 .successCount(0).errorCount(0).build();
         }
 
-        if (priceModifier == null && currentStock == null && active == null) {
+        if (priceModifier == null && active == null) {
             return BulkOperationResult.builder()
                 .successCount(0)
                 .errorCount(1)
-                .errors(List.of("At least one field must be provided: priceModifier, currentStock, active"))
+                .errors(List.of("At least one field must be provided: priceModifier, active"))
                 .build();
         }
 
@@ -321,9 +320,6 @@ public class VariantsBulkServiceImpl implements VariantsBulkService {
                 ProductVariant variant = optionalVariant.get();
                 if (priceModifier != null) {
                     variant.setPriceModifier(priceModifier);
-                }
-                if (currentStock != null) {
-                    variant.setStockCurrent(currentStock);
                 }
                 if (active != null) {
                     variant.setActive(active);

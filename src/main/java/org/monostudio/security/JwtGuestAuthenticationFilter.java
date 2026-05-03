@@ -16,8 +16,8 @@ import org.monostudio.config.RateLimitConfig;
 import org.monostudio.config.SecurityProperties;
 import org.monostudio.jpa.entities.GuestSession;
 import org.monostudio.jpa.repositories.GuestSessionsRepository;
+import org.monostudio.security.services.JwtTokenService;
 
-import javax.crypto.SecretKey;
 import jakarta.persistence.EntityExistsException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -47,12 +47,12 @@ public class JwtGuestAuthenticationFilter
 
     public JwtGuestAuthenticationFilter(
         SecurityProperties securityProperties,
-        SecretKey secretKey,
+        JwtTokenService jwtTokenService,
         AuthenticationManager authenticationManager,
         GuestSessionsRepository guestSessionsRepository,
         RateLimitConfig rateLimitConfig
     ) {
-        super(securityProperties, secretKey);
+        super(jwtTokenService);
         this.securityProperties = securityProperties;
         this.authenticationManager = authenticationManager;
         this.guestSessionsRepository = guestSessionsRepository;

@@ -101,12 +101,8 @@ public class ProductsCrudServiceImpl
         existing.setDescription(input.getDescription());
         existing.setPrice(input.getPrice());
 
-        if (input.getCurrentStock() != null) {
-            existing.setStockCurrent(input.getCurrentStock());
-        }
-        if (input.getCriticalStock() != null) {
-            existing.setStockCritical(input.getCriticalStock());
-        }
+        // Product-level stock fields are aggregate/read-only in variant-based inventory model.
+        // Keep existing values untouched; stock changes must go through inventory flows.
 
         if (input.getCategory() != null && StringUtils.isNotBlank(input.getCategory().getCode())) {
             productsCategoriesRepository.findByCode(input.getCategory().getCode())

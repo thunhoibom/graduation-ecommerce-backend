@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.apache.commons.lang3.StringUtils;
 import org.monostudio.api.models.CartItemPojo;
 import org.monostudio.api.models.CartPricingResult;
+import org.monostudio.api.models.CheckoutOtpInitiateResponse;
 import org.monostudio.api.models.CheckoutStartRequest;
 import org.monostudio.api.models.OrderDetailPojo;
 import org.monostudio.api.models.OrderPojo;
@@ -18,6 +19,7 @@ import org.monostudio.api.models.ShippingRateRequestContext;
 import org.monostudio.api.services.AdminNotificationService;
 import org.monostudio.api.services.CartPricingService;
 import org.monostudio.api.services.CheckoutService;
+import org.monostudio.api.services.CheckoutOtpService;
 import org.monostudio.api.services.OrdersProcessService;
 import org.monostudio.api.services.ProductPricingSnapshotService;
 import org.monostudio.api.services.StockReservationService;
@@ -45,6 +47,7 @@ import org.monostudio.payment.PaymentServiceException;
 import org.monostudio.jpa.entities.PaymentCallbackLog;
 import org.monostudio.jpa.entities.PaymentCallbackLog.CallbackResult;
 import org.monostudio.jpa.repositories.PaymentCallbackLogRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.lang.Math;
@@ -58,6 +61,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_PAYMENT_STARTED;
+import static org.monostudio.config.Constants.ORDER_PAYMENT_STATUS_UNPAID;
 @Service
 public class CheckoutServiceImpl
     implements CheckoutService {
@@ -81,6 +85,7 @@ public class CheckoutServiceImpl
     private final PaymentCallbackLogRepository paymentCallbackLogRepository;
     private final AdminNotificationService adminNotificationService;
     private final ProductPricingSnapshotService productPricingSnapshotService;
+    private final CheckoutOtpService checkoutOtpService;
 
     static final double TAX_PERCENT = 0.19;
 
@@ -104,7 +109,8 @@ public class CheckoutServiceImpl
         ShippingMethodsService shippingMethodsService,
         PaymentCallbackLogRepository paymentCallbackLogRepository,
         AdminNotificationService adminNotificationService,
-        ProductPricingSnapshotService productPricingSnapshotService
+        ProductPricingSnapshotService productPricingSnapshotService,
+        CheckoutOtpService checkoutOtpService
     ) {
         this.ordersCrudService = ordersCrudService;
         this.ordersProcessService = ordersProcessService;
@@ -125,6 +131,7 @@ public class CheckoutServiceImpl
         this.paymentCallbackLogRepository = paymentCallbackLogRepository;
         this.adminNotificationService = adminNotificationService;
         this.productPricingSnapshotService = productPricingSnapshotService;
+        this.checkoutOtpService = checkoutOtpService;
     }
 
     /**
@@ -144,6 +151,41 @@ public class CheckoutServiceImpl
     @Transactional
     public PaymentRedirectionDetailsPojo startCheckout(CheckoutStartRequest request)
         throws BadInputException, PaymentServiceException {
+        OrderPojo createdOrder = createOrderForCheckout(request);
+        return startPaymentForCreatedOrder(createdOrder);
+    }
+
+    @Override
+    @Transactional
+    public CheckoutOtpInitiateResponse initiateCheckoutWithOtp(CheckoutStartRequest request) throws BadInputException {
+        OrderPojo createdOrder = createOrderForCheckout(request);
+        Order order = ordersRepository.findById(createdOrder.getId())
+            .orElseThrow(() -> new EntityNotFoundException("Order not found after create: " + createdOrder.getId()));
+        return checkoutOtpService.issueOtpForOrder(order);
+    }
+
+    @Override
+    @Transactional
+    public PaymentRedirectionDetailsPojo verifyCheckoutOtp(Long orderId, String otpCode)
+        throws BadInputException, PaymentServiceException {
+        checkoutOtpService.verifyOtp(orderId, otpCode);
+        Order order = ordersRepository.findById(orderId)
+            .orElseThrow(() -> new EntityNotFoundException("Order not found: " + orderId));
+        OrderPojo orderPojo = ordersConverterService.convertToPojo(order);
+        if (!ORDER_PAYMENT_STATUS_UNPAID.equals(orderPojo.getPaymentStatus())) {
+            throw new BadInputException("Order is not waiting for OTP verification");
+        }
+        return startPaymentForCreatedOrder(orderPojo);
+    }
+
+    @Override
+    @Transactional
+    public CheckoutOtpInitiateResponse resendCheckoutOtp(Long orderId) throws BadInputException {
+        return checkoutOtpService.resendOtpForOrder(orderId);
+    }
+
+    @Transactional
+    protected OrderPojo createOrderForCheckout(CheckoutStartRequest request) throws BadInputException {
 
         // ── 1. Resolve cart session ──────────────────────────────────────────────
         CartSession cart = cartSessionsRepository.findByTokenDeep(request.getSessionToken())
@@ -241,7 +283,11 @@ public class CheckoutServiceImpl
         OrderPojo createdOrder = ordersCrudService.create(orderPojo);
         adminNotificationService.publishOrderCreated(createdOrder);
 
-        // ── 9. Request payment URL ──────────────────────────────────────────────
+        return createdOrder;
+    }
+
+    private PaymentRedirectionDetailsPojo startPaymentForCreatedOrder(OrderPojo createdOrder)
+        throws BadInputException, PaymentServiceException {
         PaymentService paymentService = paymentServices.get(createdOrder.getPaymentType());
         if (paymentService == null) {
             throw new BadInputException("Payment method not supported: " + createdOrder.getPaymentType());
@@ -260,8 +306,8 @@ public class CheckoutServiceImpl
             ordersProcessService.markAsStarted(createdOrder);
         }
 
-        logger.info("Checkout started: orderId={}, token={}, total={}, shipping={}, discount={}",
-            createdOrder.getBuyOrder(), paymentDetails.getToken(), createdOrder.getTotalValue(), shippingFee, discountAmount);
+        logger.info("Checkout started: orderId={}, token={}, total={}",
+            createdOrder.getBuyOrder(), paymentDetails.getToken(), createdOrder.getTotalValue());
 
         return paymentDetails;
     }
@@ -335,12 +381,10 @@ public class CheckoutServiceImpl
     @Override
     public OrderPojo confirmTransaction(String transactionToken, boolean wasAborted)
         throws EntityNotFoundException, PaymentServiceException {
-        // P0.4: Idempotency — if this token has already been processed, skip reprocessing.
-        // This prevents double-confirm (double stock deduction) and double-abort.
-        // The token is the gateway's unique identifier for this payment attempt.
-        if (paymentCallbackLogRepository.existsByToken(transactionToken)) {
-            OrderPojo existing = this.getOrderWithMatchingToken(transactionToken);
-            logger.info("Payment callback token {} already processed (orderId={}) — skipping duplicate callback",
+        OrderPojo existing = this.getOrderWithMatchingToken(transactionToken);
+        PaymentCallbackLog processingLog = startCallbackProcessing(transactionToken, existing);
+        if (processingLog == null) {
+            logger.info("Payment callback token {} already claimed/processed (orderId={}) — skipping duplicate callback",
                 transactionToken, existing.getBuyOrder());
             return existing;
         }
@@ -350,11 +394,9 @@ public class CheckoutServiceImpl
             OrderPojo result;
             if (wasAborted) {
                 result = ordersProcessService.markAsAborted(sellByToken);
-                // P0.4: Log abort callback for idempotency
-                logCallback(transactionToken, sellByToken.getBuyOrder(),
-                    CallbackResult.ABORTED, result.getStatus(), null);
+                completeCallbackLog(processingLog, CallbackResult.ABORTED, result.getStatus(), null);
             } else {
-                result = this.processSellPaymentStatus(sellByToken, transactionToken);
+                result = this.processSellPaymentStatus(sellByToken, transactionToken, processingLog);
             }
             return result;
         } catch (BadInputException e) {
@@ -376,7 +418,11 @@ public class CheckoutServiceImpl
         }
     }
 
-    private OrderPojo processSellPaymentStatus(OrderPojo sellByToken, String transactionToken)
+    private OrderPojo processSellPaymentStatus(
+        OrderPojo sellByToken,
+        String transactionToken,
+        PaymentCallbackLog processingLog
+    )
         throws EntityNotFoundException, PaymentServiceException {
         PaymentService paymentService = paymentServices.get(sellByToken.getPaymentType());
         PaymentResultPojo result = paymentService.requestPaymentResultWithAmount(transactionToken);
@@ -408,26 +454,7 @@ public class CheckoutServiceImpl
             throw new IllegalStateException("Transaction could not be confirmed");
         }
 
-        // P0.4: Log this callback so future duplicate callbacks are safely ignored.
-        // The existsByToken check at the top of confirmTransaction() prevents reprocessing.
-        // We use a try-block because the gateway may have already committed the transaction —
-        // failing to log should NOT roll back the payment confirmation.
-        try {
-            PaymentCallbackLog logEntry = PaymentCallbackLog.builder()
-                .token(transactionToken)
-                .orderId(sellByToken.getBuyOrder())
-                .result(callbackResult)
-                .orderStatusAfter(outcome.getStatus())
-                .authorizedAmount(result.getAuthorizedAmount())
-                .build();
-            paymentCallbackLogRepository.saveAndFlush(logEntry);
-        } catch (Exception e) {
-            // Log but do NOT fail — the payment has already been processed.
-            // Worst case: next duplicate callback will reprocess, but markAsPaid preconditions
-            // will reject it if the order is already PAID_UNCONFIRMED.
-            logger.error("Failed to log payment callback for token {}: {}",
-                transactionToken, e.getMessage());
-        }
+        completeCallbackLog(processingLog, callbackResult, outcome.getStatus(), result.getAuthorizedAmount());
 
         return outcome;
     }
@@ -490,20 +517,38 @@ public class CheckoutServiceImpl
      * P0.4: Logs a payment callback for idempotency tracking.
      * Failures are swallowed — callback processing must not fail due to logging.
      */
-    private void logCallback(String token, Long orderId,
-                             CallbackResult result, String orderStatusAfter, Integer authorizedAmount) {
+    private PaymentCallbackLog startCallbackProcessing(String token, OrderPojo order) {
         try {
             PaymentCallbackLog logEntry = PaymentCallbackLog.builder()
                 .token(token)
-                .orderId(orderId)
-                .result(result)
-                .orderStatusAfter(orderStatusAfter)
-                .authorizedAmount(authorizedAmount)
+                .orderId(order.getBuyOrder())
+                .result(CallbackResult.PROCESSING)
+                .orderStatusAfter(order.getStatus())
                 .build();
-            paymentCallbackLogRepository.saveAndFlush(logEntry);
+            return paymentCallbackLogRepository.saveAndFlush(logEntry);
+        } catch (DataIntegrityViolationException duplicate) {
+            return null;
         } catch (Exception e) {
-            logger.error("Failed to log payment callback for token {}: {}",
+            logger.error("Failed to claim payment callback token {}: {}",
                 token, e.getMessage());
+            throw e;
+        }
+    }
+
+    private void completeCallbackLog(
+        PaymentCallbackLog processingLog,
+        CallbackResult result,
+        String orderStatusAfter,
+        Integer authorizedAmount
+    ) {
+        try {
+            processingLog.setResult(result);
+            processingLog.setOrderStatusAfter(orderStatusAfter);
+            processingLog.setAuthorizedAmount(authorizedAmount);
+            paymentCallbackLogRepository.saveAndFlush(processingLog);
+        } catch (Exception e) {
+            logger.error("Failed to finalize payment callback log for token {}: {}",
+                processingLog.getToken(), e.getMessage());
         }
     }
 

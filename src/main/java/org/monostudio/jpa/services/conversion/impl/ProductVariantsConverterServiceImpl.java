@@ -97,10 +97,8 @@ public class ProductVariantsConverterServiceImpl
             .active(source.getActive() != null ? source.getActive() : true)
             .barcode(source.getBarcode())
             .build();
-
-        if (source.getCurrentStock() != null) {
-            target.setStockCurrent(source.getCurrentStock());
-        }
+        // stockCurrent is inventory-owned; initialization/edit must go through inventory flows.
+        target.setStockCurrent(0);
 
         if (source.getCriticalStock() != null) {
             target.setStockCritical(source.getCriticalStock());
@@ -144,9 +142,6 @@ public class ProductVariantsConverterServiceImpl
         target.setActive(source.getActive() != null ? source.getActive() : true);
         target.setBarcode(source.getBarcode());
 
-        if (source.getCurrentStock() != null) {
-            target.setStockCurrent(source.getCurrentStock());
-        }
         if (source.getCriticalStock() != null) {
             target.setStockCritical(source.getCriticalStock());
         }

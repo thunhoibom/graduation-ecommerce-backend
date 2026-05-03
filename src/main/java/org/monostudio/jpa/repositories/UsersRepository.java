@@ -27,4 +27,7 @@ public interface UsersRepository
 
     @Query("SELECT u FROM User u JOIN FETCH u.person p WHERE p.email = :email")
     Optional<User> findByPersonEmail(@Param("email") String email);
+
+    @Query("SELECT u FROM User u JOIN FETCH u.person p WHERE LOWER(p.email) = LOWER(:email)")
+    Optional<User> findByPersonEmailIgnoreCase(@Param("email") String email);
 }

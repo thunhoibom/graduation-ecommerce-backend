@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.monostudio.api.models.CheckoutStartRequest;
+import org.monostudio.api.models.CheckoutOtpInitiateResponse;
+import org.monostudio.api.models.CheckoutOtpResendRequest;
+import org.monostudio.api.models.CheckoutOtpVerifyRequest;
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.services.CheckoutService;
@@ -79,6 +82,39 @@ public class PublicCheckoutController {
         }
 
         return service.startCheckout(transactionRequest);
+    }
+
+    @PostMapping("/initiate")
+    @Operation(summary = "Create order and send OTP to customer email")
+    @PreAuthorize("hasAuthority('" + AUTHORITY_CHECKOUT + "')")
+    public CheckoutOtpInitiateResponse initiateCheckout(
+        @Valid @RequestBody CheckoutStartRequest transactionRequest,
+        @RequestHeader(value = "X-Session-Token", required = false) String sessionTokenHeader
+    ) throws BadInputException {
+        if ((transactionRequest.getSessionToken() == null || transactionRequest.getSessionToken().isBlank())
+            && sessionTokenHeader != null && !sessionTokenHeader.isBlank()) {
+            transactionRequest.setSessionToken(sessionTokenHeader);
+        }
+        if (transactionRequest.getSessionToken() == null || transactionRequest.getSessionToken().isBlank()) {
+            throw new BadInputException("A session token is required (either in body or X-Session-Token header)");
+        }
+        return service.initiateCheckoutWithOtp(transactionRequest);
+    }
+
+    @PostMapping("/verify-otp")
+    @Operation(summary = "Verify checkout OTP and start payment")
+    @PreAuthorize("hasAuthority('" + AUTHORITY_CHECKOUT + "')")
+    public PaymentRedirectionDetailsPojo verifyCheckoutOtp(@Valid @RequestBody CheckoutOtpVerifyRequest request)
+        throws BadInputException, PaymentServiceException {
+        return service.verifyCheckoutOtp(request.getOrderId(), request.getOtpCode());
+    }
+
+    @PostMapping("/resend-otp")
+    @Operation(summary = "Resend checkout OTP to customer email")
+    @PreAuthorize("hasAuthority('" + AUTHORITY_CHECKOUT + "')")
+    public CheckoutOtpInitiateResponse resendCheckoutOtp(@Valid @RequestBody CheckoutOtpResendRequest request)
+        throws BadInputException {
+        return service.resendCheckoutOtp(request.getOrderId());
     }
 
     /**

@@ -51,6 +51,8 @@ public class PaymentCallbackLog
     private static final long serialVersionUID = 1L;
 
     public enum CallbackResult {
+        /** Callback token claimed and processing started */
+        PROCESSING,
         /** Payment succeeded — order marked PAID_UNCONFIRMED */
         SUCCESS,
         /** Payment failed or amount mismatch — order marked PAYMENT_FAILED or PAYMENT_CANCELLED */

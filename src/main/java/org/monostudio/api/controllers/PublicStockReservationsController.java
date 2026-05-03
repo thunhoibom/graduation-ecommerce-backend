@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.monostudio.api.models.StockReservationPojo;
 import org.monostudio.api.services.StockReservationService;
 import org.monostudio.common.exceptions.BadInputException;
+import org.monostudio.jpa.entities.ProductVariant;
+import org.monostudio.jpa.repositories.ProductVariantsRepository;
 
 import java.util.List;
 import java.util.Map;
@@ -27,10 +29,15 @@ import java.util.Map;
 public class PublicStockReservationsController {
 
     private final StockReservationService stockReservationService;
+    private final ProductVariantsRepository productVariantsRepository;
 
     @Autowired
-    public PublicStockReservationsController(StockReservationService stockReservationService) {
+    public PublicStockReservationsController(
+        StockReservationService stockReservationService,
+        ProductVariantsRepository productVariantsRepository
+    ) {
         this.stockReservationService = stockReservationService;
+        this.productVariantsRepository = productVariantsRepository;
     }
 
     /**
@@ -127,13 +134,21 @@ public class PublicStockReservationsController {
     public ResponseEntity<Map<String, Object>> checkAvailability(
         @RequestParam String variantSku
     ) {
-        Integer available = stockReservationService.getAvailableStock(variantSku);
-        if (available == null) {
+        ProductVariant variant = productVariantsRepository.findBySku(variantSku).orElse(null);
+        if (variant == null) {
             return ResponseEntity.notFound().build();
         }
+        int onHand = variant.getStockCurrent();
+        int reserved = variant.getStockReserved();
+        int available = Math.max(0, onHand - reserved);
         return ResponseEntity.ok(Map.of(
             "variantSku", variantSku,
-            "availableStock", available
+            // Backward-compatible field name
+            "availableStock", available,
+            // Canonical inventory fields
+            "onHand", onHand,
+            "reserved", reserved,
+            "availableToSell", available
         ));
     }
 

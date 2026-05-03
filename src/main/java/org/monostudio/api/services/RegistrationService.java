@@ -18,4 +18,20 @@ public interface RegistrationService {
      * @throws EntityExistsException When a user account matching the provided details already exists.
      */
     void register(RegistrationPojo registration) throws BadInputException, EntityExistsException;
+
+    /**
+     * Finds or creates a Customer user account from a verified Google profile.
+     *
+     * @param email       Google account email
+     * @param givenName   Google account given name
+     * @param familyName  Google account family name
+     * @param fallbackKey Fallback unique key used to generate username if needed
+     * @return Existing or newly created user linked to provided email
+     */
+    org.monostudio.jpa.entities.User findOrCreateGoogleUser(
+        String email,
+        String givenName,
+        String familyName,
+        String fallbackKey
+    ) throws BadInputException;
 }

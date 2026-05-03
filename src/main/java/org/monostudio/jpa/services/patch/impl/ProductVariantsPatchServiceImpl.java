@@ -65,10 +65,9 @@ public class ProductVariantsPatchServiceImpl
         }
 
         if (changes.containsKey("currentStock")) {
-            Integer currentStock = (Integer) changes.get("currentStock");
-            if (currentStock != null) {
-                target.setStockCurrent(currentStock);
-            }
+            throw new BadInputException(
+                "currentStock cannot be changed from product variant API. Use inventory adjustment endpoints."
+            );
         }
 
         if (changes.containsKey("criticalStock")) {

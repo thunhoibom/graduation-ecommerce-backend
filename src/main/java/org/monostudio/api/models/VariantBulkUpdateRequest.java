@@ -16,6 +16,5 @@ import java.util.List;
 public class VariantBulkUpdateRequest {
     private List<Long> ids;
     private Integer priceModifier;
-    private Integer currentStock;
     private Boolean active;
 }

@@ -24,6 +24,9 @@ import org.monostudio.jpa.repositories.GuestSessionsRepository;
 import org.monostudio.security.JwtGuestAuthenticationFilter;
 import org.monostudio.security.JwtLoginAuthenticationFilter;
 import org.monostudio.security.JwtTokenVerifierFilter;
+import org.monostudio.security.oauth2.GoogleOAuth2AuthenticationFailureHandler;
+import org.monostudio.security.oauth2.GoogleOAuth2AuthenticationSuccessHandler;
+import org.monostudio.security.services.JwtTokenService;
 import org.monostudio.security.services.AuthorizationHeaderParserService;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
@@ -33,7 +36,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.http.HttpMethod;
-import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
 
 @Configuration
 @EnableWebSecurity
@@ -45,6 +47,10 @@ public class SecurityConfig {
     private final GuestSessionsRepository guestSessionsRepository;
     private final CorsProperties corsProperties;
     private final RateLimitConfig rateLimitConfig;
+    private final JwtTokenService jwtTokenService;
+    private final GoogleOAuth2AuthenticationSuccessHandler googleOAuth2AuthenticationSuccessHandler;
+    private final GoogleOAuth2AuthenticationFailureHandler googleOAuth2AuthenticationFailureHandler;
+    private final PasswordEncoder passwordEncoder;
     private AuthenticationManager authenticationManager;
 
     @Autowired
@@ -54,7 +60,11 @@ public class SecurityConfig {
                           AuthorizationHeaderParserService<Claims> jwtClaimsParserService,
                           GuestSessionsRepository guestSessionsRepository,
                           CorsProperties corsProperties,
-                          RateLimitConfig rateLimitConfig) {
+                          RateLimitConfig rateLimitConfig,
+                          JwtTokenService jwtTokenService,
+                          GoogleOAuth2AuthenticationSuccessHandler googleOAuth2AuthenticationSuccessHandler,
+                          GoogleOAuth2AuthenticationFailureHandler googleOAuth2AuthenticationFailureHandler,
+                          PasswordEncoder passwordEncoder) {
         this.userDetailsService = userDetailsService;
         this.secretKey = secretKey;
         this.securityProperties = securityProperties;
@@ -62,6 +72,10 @@ public class SecurityConfig {
         this.guestSessionsRepository = guestSessionsRepository;
         this.corsProperties = corsProperties;
         this.rateLimitConfig = rateLimitConfig;
+        this.jwtTokenService = jwtTokenService;
+        this.googleOAuth2AuthenticationSuccessHandler = googleOAuth2AuthenticationSuccessHandler;
+        this.googleOAuth2AuthenticationFailureHandler = googleOAuth2AuthenticationFailureHandler;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Bean
@@ -70,7 +84,7 @@ public class SecurityConfig {
             .authenticationManager(this.authenticationManager())
             .headers(configure -> configure.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin))
             .csrf(AbstractHttpConfigurer::disable)
-            .sessionManagement(configure -> configure.sessionCreationPolicy(STATELESS))
+            .sessionManagement(configure -> configure.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(configure -> configure
                 .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.ASYNC, DispatcherType.FORWARD).permitAll()
                 .requestMatchers("/error").permitAll()
@@ -90,8 +104,13 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/data/images/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/data/product-variants", "/api/data/product-variants/**").permitAll()
                 .requestMatchers("/api/public/auth/register").permitAll()
+                .requestMatchers("/api/public/auth/google/start").permitAll()
+                .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 .anyRequest().authenticated())
+            .oauth2Login(configure -> configure
+                .successHandler(googleOAuth2AuthenticationSuccessHandler)
+                .failureHandler(googleOAuth2AuthenticationFailureHandler))
             .addFilter(this.loginFilterForUrl("/api/public/auth/login"))
             .addFilterAfter(this.guestFilterForUrl("/api/public/guest"),
                             JwtLoginAuthenticationFilter.class)
@@ -101,11 +120,6 @@ public class SecurityConfig {
             .build();
     }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        int strength = securityProperties.getBcryptEncoderStrength();
-        return new BCryptPasswordEncoder(strength);
-    }
 
     @Bean
     public AuthenticationManager authenticationManager() {
@@ -116,15 +130,14 @@ public class SecurityConfig {
     }
 
     private DaoAuthenticationProvider daoAuthenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(this.passwordEncoder());
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(this.passwordEncoder);
         provider.setUserDetailsService(userDetailsService);
         return provider;
     }
 
     private UsernamePasswordAuthenticationFilter loginFilterForUrl(String url) throws Exception {
         JwtLoginAuthenticationFilter filter = new JwtLoginAuthenticationFilter(
-            securityProperties,
-            secretKey,
+            jwtTokenService,
             authenticationManager,
             rateLimitConfig);
         filter.setFilterProcessesUrl(url);
@@ -134,7 +147,7 @@ public class SecurityConfig {
     private UsernamePasswordAuthenticationFilter guestFilterForUrl(String url) throws Exception {
         JwtGuestAuthenticationFilter filter = new JwtGuestAuthenticationFilter(
             securityProperties,
-            secretKey,
+            jwtTokenService,
             authenticationManager,
             guestSessionsRepository,
             rateLimitConfig);

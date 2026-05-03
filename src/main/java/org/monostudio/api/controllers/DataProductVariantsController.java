@@ -270,7 +270,6 @@ public class DataProductVariantsController
         BulkOperationResult result = variantsBulkService.bulkUpdate(
             ids,
             request != null ? request.getPriceModifier() : null,
-            request != null ? request.getCurrentStock() : null,
             request != null ? request.getActive() : null
         );
         if (ids != null) {

@@ -10,9 +10,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.monostudio.api.models.LoginPojo;
 import org.monostudio.config.RateLimitConfig;
-import org.monostudio.config.SecurityProperties;
+import org.monostudio.security.services.JwtTokenService;
 
-import javax.crypto.SecretKey;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -23,12 +22,11 @@ public class JwtLoginAuthenticationFilter
     private final RateLimitConfig rateLimitConfig;
 
     public JwtLoginAuthenticationFilter(
-        SecurityProperties jwtProperties,
-        SecretKey secretKey,
+        JwtTokenService jwtTokenService,
         AuthenticationManager authenticationManager,
         RateLimitConfig rateLimitConfig
     ) {
-        super(jwtProperties, secretKey);
+        super(jwtTokenService);
         this.authenticationManager = authenticationManager;
         this.rateLimitConfig = rateLimitConfig;
     }

@@ -45,6 +45,15 @@ public class StockReservationPojo {
     /** Parent product barcode */
     private String productBarcode;
 
+    /** Snapshot of current physical stock (on-hand) */
+    private Integer onHand;
+
+    /** Snapshot of stock currently reserved by active sessions */
+    private Integer reserved;
+
+    /** Snapshot of sellable stock = max(onHand - reserved, 0) */
+    private Integer availableToSell;
+
     @Min(1)
     @NotNull
     private Integer quantity;

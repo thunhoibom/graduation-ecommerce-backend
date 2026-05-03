@@ -2,6 +2,7 @@ package org.monostudio.mailing;
 
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.api.models.ReturnRequestPojo;
+import java.time.Instant;
 
 /**
  * Point of entry for services to send mail to customers and owners alike
@@ -50,4 +51,9 @@ public interface MailingService {
      * @throws MailingServiceException When any error occurs while interacting with the mail server/service provider
      */
     void notifyReturnRequestToOwners(ReturnRequestPojo request) throws MailingServiceException;
+
+    /**
+     * Send checkout OTP for customer confirmation before payment starts.
+     */
+    void notifyCheckoutOtp(String email, Long orderId, String otpCode, Instant expiresAt) throws MailingServiceException;
 }

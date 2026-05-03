@@ -111,8 +111,13 @@ public class StockReservationServiceImpl
             .updatedAt(reservation.getUpdatedAt());
 
         if (variant != null) {
+            int onHand = variant.getStockCurrent();
+            int reserved = variant.getStockReserved();
             builder.variantSize(variant.getSize())
-                .variantColor(variant.getColor());
+                .variantColor(variant.getColor())
+                .onHand(onHand)
+                .reserved(reserved)
+                .availableToSell(Math.max(0, onHand - reserved));
             if (variant.getProduct() != null) {
                 builder.productName(variant.getProduct().getName())
                     .productBarcode(variant.getProduct().getBarcode());

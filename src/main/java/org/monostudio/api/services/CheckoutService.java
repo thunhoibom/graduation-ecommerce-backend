@@ -1,6 +1,7 @@
 package org.monostudio.api.services;
 
 import org.monostudio.api.models.CheckoutStartRequest;
+import org.monostudio.api.models.CheckoutOtpInitiateResponse;
 import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
 import org.monostudio.api.models.OrderPojo;
 import org.monostudio.common.exceptions.BadInputException;
@@ -28,6 +29,14 @@ public interface CheckoutService {
      */
     PaymentRedirectionDetailsPojo startCheckout(CheckoutStartRequest request)
         throws BadInputException, PaymentServiceException;
+
+    CheckoutOtpInitiateResponse initiateCheckoutWithOtp(CheckoutStartRequest request)
+        throws BadInputException;
+
+    PaymentRedirectionDetailsPojo verifyCheckoutOtp(Long orderId, String otpCode)
+        throws BadInputException, PaymentServiceException;
+
+    CheckoutOtpInitiateResponse resendCheckoutOtp(Long orderId) throws BadInputException;
 
     /**
      * Fetch details to redirect the requester to the payment page; mark transaction as "started";

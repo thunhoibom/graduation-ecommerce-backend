@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.monostudio.api.models.PersonPojo;
 import org.monostudio.api.models.RegistrationPojo;
 import org.monostudio.api.services.RegistrationService;
@@ -24,6 +25,7 @@ import org.monostudio.jpa.services.conversion.PeopleConverterService;
 
 import jakarta.persistence.EntityExistsException;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class RegistrationServiceImpl
@@ -102,12 +104,42 @@ public class RegistrationServiceImpl
         // Credential info not logged — security best practice
 
         // Ensure Customer record exists for this person
-        if (customersRepository.findByPersonId(personToUse.getId()).isEmpty()) {
-            Customer newCustomer = Customer.builder()
-                .person(personToUse)
-                .build();
-            customersRepository.saveAndFlush(newCustomer);
+        ensureCustomerProfile(personToUse);
+    }
+
+    @Override
+    @Transactional
+    public User findOrCreateGoogleUser(String email, String givenName, String familyName, String fallbackKey)
+        throws BadInputException {
+        if (email == null || email.isBlank()) {
+            throw new BadInputException("Google account email is missing.");
         }
+
+        String normalizedEmail = email.trim().toLowerCase();
+        Optional<User> existingUser = usersRepository.findByPersonEmailIgnoreCase(normalizedEmail);
+        if (existingUser.isPresent()) {
+            return existingUser.get();
+        }
+
+        Person person = peopleRepository.findByEmail(normalizedEmail)
+            .orElseGet(() -> peopleRepository.saveAndFlush(Person.builder()
+                .firstName(defaultIfBlank(givenName, "Google"))
+                .lastName(defaultIfBlank(familyName, "User"))
+                .email(normalizedEmail)
+                .idNumber("")
+                .phone1("")
+                .phone2("")
+                .build()));
+
+        User newUser = User.builder()
+            .name(generateUniqueUsername(normalizedEmail, fallbackKey))
+            .password(passwordEncoder.encode(UUID.randomUUID().toString()))
+            .person(person)
+            .build();
+        newUser.setUserRole(resolveCustomerRole());
+        User savedUser = usersRepository.saveAndFlush(newUser);
+        ensureCustomerProfile(person);
+        return savedUser;
     }
 
     protected User convertToUser(RegistrationPojo registration) {
@@ -117,12 +149,52 @@ public class RegistrationServiceImpl
             .password(password)
             .build();
 
+        target.setUserRole(resolveCustomerRole());
+        return target;
+    }
+
+    private UserRole resolveCustomerRole() {
         Optional<UserRole> customerRole = rolesRepository.findByName("Customer");
         if (customerRole.isEmpty()) {
             throw new IllegalStateException("No user role matches 'Customer', database might be compromised");
-        } else {
-            target.setUserRole(customerRole.get());
         }
-        return target;
+        return customerRole.get();
+    }
+
+    private void ensureCustomerProfile(Person person) {
+        if (customersRepository.findByPersonId(person.getId()).isEmpty()) {
+            Customer newCustomer = Customer.builder()
+                .person(person)
+                .build();
+            customersRepository.saveAndFlush(newCustomer);
+        }
+    }
+
+    private String generateUniqueUsername(String email, String fallbackKey) {
+        String emailPrefix = email.contains("@") ? email.substring(0, email.indexOf('@')) : email;
+        String base = (emailPrefix + "_google")
+            .toLowerCase()
+            .replaceAll("[^a-z0-9._-]", "_");
+        if (base.isBlank()) {
+            base = "google_user";
+        }
+        String candidate = base;
+        int suffix = 1;
+        while (usersRepository.findByName(candidate).isPresent()) {
+            if (fallbackKey != null && !fallbackKey.isBlank() && suffix == 1) {
+                candidate = base + "_" + fallbackKey.substring(0, Math.min(8, fallbackKey.length())).toLowerCase();
+            } else {
+                candidate = base + "_" + suffix;
+                suffix++;
+            }
+        }
+        return candidate;
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value.trim();
     }
 }

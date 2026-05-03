@@ -137,9 +137,8 @@ public class ProductsConverterServiceImpl
             .description(source.getDescription())
             .build();
 
-        if (source.getCurrentStock()!=null) {
-            target.setStockCurrent(source.getCurrentStock());
-        }
+        // Product-level stock is read-only in variant-based inventory model.
+        target.setStockCurrent(0);
 
         if (source.getCriticalStock()!=null) {
             target.setStockCritical(source.getCriticalStock());
