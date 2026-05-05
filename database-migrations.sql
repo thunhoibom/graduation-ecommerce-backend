@@ -213,6 +213,27 @@ ALTER TABLE orders
 ALTER TABLE promotion_rules
     ADD COLUMN IF NOT EXISTS rule_scope VARCHAR(20) NOT NULL DEFAULT 'CART';
 
+-- ============================================================
+-- 12. User behavior events (storefront personalization)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_behavior_events (
+    event_id BIGSERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    device_id VARCHAR(64) NOT NULL,
+    customer_id BIGINT,
+    event_type VARCHAR(40) NOT NULL,
+    payload TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ube_device_created
+    ON user_behavior_events (device_id, created_at DESC);
+
+-- ============================================================
+-- 13. Persons — person_id_number optional (OAuth / no national ID)
+-- ============================================================
+ALTER TABLE persons
+    ALTER COLUMN person_id_number DROP NOT NULL;
+
 COMMIT;
 
 -- ============================================================

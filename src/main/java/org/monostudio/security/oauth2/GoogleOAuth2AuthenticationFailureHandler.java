@@ -26,10 +26,14 @@ public class GoogleOAuth2AuthenticationFailureHandler implements AuthenticationF
         AuthenticationException exception
     ) throws IOException {
         String redirectUri = oAuth2LoginProperties.getFrontendFailureUrl();
+        // Never put raw exception.getMessage() in the query string: it can contain spaces and
+        // break UriComponentsBuilder / leak internals. Use a short machine-readable reason only.
+        String reason = exception.getClass().getSimpleName();
+
         String finalRedirect = UriComponentsBuilder.fromUriString(redirectUri)
             .queryParam("error", "google_login_failed")
-            .queryParam("message", exception.getMessage())
-            .build(true)
+            .queryParam("reason", reason)
+            .build()
             .toUriString();
 
         Cookie cookie = new Cookie(GoogleOAuth2AuthenticationSuccessHandler.REDIRECT_COOKIE_NAME, "");

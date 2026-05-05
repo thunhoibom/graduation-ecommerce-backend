@@ -4,7 +4,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,6 +13,7 @@ import org.monostudio.api.models.DataPagePojo;
 import org.monostudio.api.models.ProductPojo;
 import org.monostudio.api.models.WeatherCategoryRecommendationPojo;
 import org.monostudio.api.services.PaginationService;
+import org.monostudio.api.services.UserBehaviorService;
 import org.monostudio.jpa.entities.ProductStatus;
 import org.monostudio.jpa.services.SortSpecParserService;
 import org.monostudio.jpa.services.crud.ProductsCrudService;
@@ -24,6 +24,7 @@ import jakarta.persistence.EntityNotFoundException;
 import org.monostudio.search.models.ProductDocument;
 import org.monostudio.search.services.SearchService;
 import org.monostudio.config.cache.CacheNames;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +43,7 @@ public class PublicProductsController {
     private final PaginationService paginationService;
     private final SortSpecParserService sortService;
     private final SearchService searchService;
+    private final UserBehaviorService userBehaviorService;
 
     @Autowired
     public PublicProductsController(
@@ -49,13 +51,15 @@ public class PublicProductsController {
         ProductsPredicateService productsPredicateService,
         PaginationService paginationService,
         SortSpecParserService sortService,
-        SearchService searchService
+        SearchService searchService,
+        UserBehaviorService userBehaviorService
     ) {
         this.productsCrudService = productsCrudService;
         this.productsPredicateService = productsPredicateService;
         this.paginationService = paginationService;
         this.sortService = sortService;
         this.searchService = searchService;
+        this.userBehaviorService = userBehaviorService;
     }
 
     /**
@@ -131,6 +135,8 @@ public class PublicProductsController {
         String category = params.get("category");
 
         var sort = sortService.parse(ProductsSortSpec.ORDER_SPEC_MAP, params);
+
+        List<String> excludeIds = parseExcludeIds(params.get("excludeIds"));
         
         return searchService.searchProducts(
                 query,
@@ -140,8 +146,67 @@ public class PublicProductsController {
                 ProductStatus.PUBLISHED.name(),
                 pageIndex,
                 pageSize,
+                sort,
+                excludeIds
+        );
+    }
+
+    @GetMapping("/recommendations/for-you")
+    @Operation(summary = "Search-scoped recommendations boosted by recent viewed categories (deviceId)")
+    public DataPagePojo<ProductDocument> recommendationsForYou(@RequestParam Map<String, String> params) {
+        String query = params.getOrDefault("q", "");
+        int pageIndex = paginationService.determineRequestedPageIndex(params);
+        int pageSize = paginationService.determineRequestedPageSize(params);
+        if (pageSize <= 0) {
+            pageSize = 12;
+        }
+        pageSize = Math.min(pageSize, 30);
+
+        List<String> excludeIds = parseExcludeIds(params.get("excludeIds"));
+        String deviceId = params.getOrDefault("deviceId", "").trim();
+
+        List<String> boostCategories = deviceId.isEmpty()
+                ? List.of()
+                : userBehaviorService.rankCategoryCodesForDevice(deviceId, 5);
+
+        Map<String, String> sortParams = new HashMap<>(params);
+        if (!sortParams.containsKey("sortBy")) {
+            sortParams.put("sortBy", "price");
+        }
+        if (!sortParams.containsKey("order")) {
+            sortParams.put("order", "desc");
+        }
+        var sort = sortService.parse(ProductsSortSpec.ORDER_SPEC_MAP, sortParams);
+
+        return searchService.searchForYou(
+                query,
+                excludeIds,
+                boostCategories,
+                ProductStatus.PUBLISHED.name(),
+                pageIndex,
+                pageSize,
                 sort
         );
+    }
+
+    private static List<String> parseExcludeIds(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        String[] parts = raw.split(",");
+        List<String> out = new ArrayList<>();
+        for (String p : parts) {
+            if (p != null) {
+                String t = p.trim();
+                if (!t.isEmpty()) {
+                    out.add(t);
+                }
+            }
+            if (out.size() >= 100) {
+                break;
+            }
+        }
+        return out;
     }
 
     @GetMapping("/recommendations/weather-category")

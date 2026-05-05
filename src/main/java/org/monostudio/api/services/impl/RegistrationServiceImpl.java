@@ -126,7 +126,8 @@ public class RegistrationServiceImpl
                 .firstName(defaultIfBlank(givenName, "Google"))
                 .lastName(defaultIfBlank(familyName, "User"))
                 .email(normalizedEmail)
-                .idNumber("")
+                // National ID optional; use null when absent (requires DB column nullable — see database-migrations §13).
+                .idNumber(null)
                 .phone1("")
                 .phone2("")
                 .build()));

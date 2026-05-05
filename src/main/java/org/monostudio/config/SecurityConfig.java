@@ -80,8 +80,10 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception {
+        // Do not call httpSecurity.authenticationManager(...) here: our @Bean manager only has
+        // DaoAuthenticationProvider (for JWT login/guest filters). oauth2Login() needs its own
+        // providers (OAuth2LoginAuthenticationProvider etc.); forcing a Dao-only manager breaks Google login.
         return httpSecurity
-            .authenticationManager(this.authenticationManager())
             .headers(configure -> configure.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin))
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(configure -> configure.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
@@ -98,6 +100,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/public/checkout/**").permitAll()
                 .requestMatchers("/api/data/notifications/stream").permitAll()
                 .requestMatchers("/api/public/categories", "/api/public/categories/**").permitAll()
+                .requestMatchers("/api/public/behavior", "/api/public/behavior/**").permitAll()
                 .requestMatchers("/api/public/products/", "/api/public/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/data/products", "/api/data/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/data/product_categories", "/api/data/product_categories/**").permitAll()

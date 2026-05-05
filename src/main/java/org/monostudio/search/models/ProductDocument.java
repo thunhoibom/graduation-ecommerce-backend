@@ -8,6 +8,8 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
+import org.springframework.data.elasticsearch.annotations.InnerField;
+import org.springframework.data.elasticsearch.annotations.MultiField;
 import org.springframework.data.elasticsearch.annotations.Setting;
 
 import java.util.List;
@@ -23,7 +25,13 @@ public class ProductDocument {
     @Id
     private String id;
 
-    @Field(type = FieldType.Text, analyzer = "standard_vietnamese", copyTo = "all")
+    /** Keyword subfield is required for sorting; plain `text` fields cannot be sorted in Elasticsearch. */
+    @MultiField(
+        mainField = @Field(type = FieldType.Text, analyzer = "standard_vietnamese", copyTo = "all"),
+        otherFields = {
+            @InnerField(suffix = "keyword", type = FieldType.Keyword)
+        }
+    )
     private String name;
 
     @Field(type = FieldType.Keyword)

@@ -14,6 +14,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import org.monostudio.api.services.RegistrationService;
 import org.monostudio.config.OAuth2LoginProperties;
 import org.monostudio.jpa.entities.User;
+import org.monostudio.config.Constants;
 import org.monostudio.security.services.JwtTokenService;
 
 import java.io.IOException;
@@ -64,12 +65,14 @@ public class GoogleOAuth2AuthenticationSuccessHandler implements AuthenticationS
             return;
         }
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getName());
-        String bearerToken = jwtTokenService.issueBearerToken(user.getName(), userDetails.getAuthorities());
+        String jwt = jwtTokenService.issueToken(user.getName(), userDetails.getAuthorities());
+        String bearerToken = Constants.JWT_PREFIX + jwt;
 
         String redirectUri = resolveRedirectUri(request);
+        // Query params must not contain spaces; never put "Bearer <jwt>" in `token` (frontend expects raw JWT).
         String finalRedirect = UriComponentsBuilder.fromUriString(redirectUri)
-            .queryParam("token", bearerToken)
-            .build(true)
+            .queryParam("token", jwt)
+            .build()
             .toUriString();
 
         clearRedirectCookie(response);
@@ -81,7 +84,7 @@ public class GoogleOAuth2AuthenticationSuccessHandler implements AuthenticationS
         String redirectUri = resolveRedirectUri(request);
         String finalRedirect = UriComponentsBuilder.fromUriString(redirectUri)
             .queryParam("error", error)
-            .build(true)
+            .build()
             .toUriString();
         clearRedirectCookie(response);
         response.sendRedirect(finalRedirect);
