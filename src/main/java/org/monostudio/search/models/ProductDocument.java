@@ -61,6 +61,22 @@ public class ProductDocument {
     @Field(type = FieldType.Keyword)
     private String status;
 
+    /** Numeric id for stable ES sorting (string {@code id} is not ideal for numeric order). */
+    @Field(type = FieldType.Long)
+    private Long productNumericId;
+
+    /** Aggregate product-level stock (mirrors JPA public listing filter {@code stockCurrent > 0}). */
+    @Field(type = FieldType.Integer)
+    private Integer stockCurrent;
+
+    /** Distinct variant colors on this product (lowercase) for facet-style filtering. */
+    @Field(type = FieldType.Keyword)
+    private List<String> variantColors;
+
+    /** Distinct variant sizes on this product (lowercase) for facet-style filtering. */
+    @Field(type = FieldType.Keyword)
+    private List<String> variantSizes;
+
     @Field(type = FieldType.Keyword)
     private String primaryImageUrl;
 

@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.monostudio.jpa.entities.BlogPost;
 import org.monostudio.jpa.entities.Product;
+import org.monostudio.jpa.entities.ProductVariant;
 import org.monostudio.jpa.repositories.BlogPostsRepository;
 import org.monostudio.jpa.repositories.ProductImagesRepository;
 import org.monostudio.jpa.repositories.ProductsRepository;
@@ -19,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.function.Function;
 
 @Service
 @Slf4j
@@ -54,10 +57,14 @@ public class ElasticsearchSyncConsumer {
                 WeatherProfile weatherProfile = inferWeatherProfile(product);
                 ProductDocument doc = ProductDocument.builder()
                         .id(product.getId().toString())
+                        .productNumericId(product.getId())
                         .name(product.getName())
                         .barcode(product.getBarcode())
                         .description(product.getDescription())
                         .price(product.getPrice())
+                        .stockCurrent(product.getStockCurrent())
+                        .variantColors(extractVariantTokens(product.getVariants(), ProductVariant::getColor))
+                        .variantSizes(extractVariantTokens(product.getVariants(), ProductVariant::getSize))
                         .categoryName(product.getProductCategory() != null ? product.getProductCategory().getName() : null)
                         .categoryCodes(extractCategoryHierarchy(product.getProductCategory()))
                         .weatherTags(weatherProfile.tags())
@@ -85,6 +92,23 @@ public class ElasticsearchSyncConsumer {
                 log.info("Indexed BlogPost: {}", doc.getId());
             });
         }
+    }
+
+    private List<String> extractVariantTokens(
+            List<ProductVariant> variants,
+            Function<ProductVariant, String> getter
+    ) {
+        if (variants == null || variants.isEmpty()) {
+            return List.of();
+        }
+        return variants.stream()
+                .map(getter)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> s.toLowerCase(Locale.ROOT))
+                .distinct()
+                .toList();
     }
 
     private List<String> extractCategoryHierarchy(org.monostudio.jpa.entities.ProductCategory category) {

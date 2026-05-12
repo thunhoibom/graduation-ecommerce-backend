@@ -521,7 +521,7 @@ public class OrdersProcessServiceImpl
         String currentStatus = existingOrder.getFulfillmentStatus();
         boolean canHandover =
             ORDER_FULFILLMENT_STATUS_PROCESSING.equals(currentStatus)
-                || ORDER_FULFILLMENT_STATUS_CONFIRMED.equals(currentStatus);
+                || ORDER_FULFILLMENT_STATUS_CONFIRMED.equals(currentStatus); // Legacy/Backup support
         if (!canHandover) {
             throw new BadInputException(
                 "Cannot move order " + existingOrder.getId()

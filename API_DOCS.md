@@ -1625,11 +1625,16 @@ Also permitted via config for GET.
 | Method | Path | Auth |
 |---|---|---|
 | `GET` | `/data/customers` | read |
-| `GET` | `/data/customers/{id}` | read |
-| `POST` | `/data/customers` | create |
+| `GET` | `/data/customers/{id}` | read (returns `PersonPojo` with read-only `customerId`) |
+| `GET` | `/data/customers/{id}/detail` | read — admin profile: `CustomerAdminPojo` (orders, addresses, aggregates) |
+| `POST` | `/data/customers` | create — response body: `PersonPojo` with `customerId` |
 | `PUT` | `/data/customers/{id}` | update |
-| `PATCH` | `/data/customers/{id}` | update |
-| `DELETE` | `/data/customers/{id}` | delete |
+| `PATCH` | `/data/customers/{id}` | partial update (`person.*` keys in JSON map) |
+| `DELETE` | `/data/customers/{id}` | delete — rejected (`400`) if customer has orders or a linked user account |
+
+**List filtering (customers predicate):** `q` (matches first/last name, email, phones, id number), plus `nameLike`, `emailLike`, `phoneLike`, and exact-match keys such as `email`, `name`.
+
+**Manual QA (admin):** list pagination (`pageIndex`/`pageSize`), search box (`q`), open detail (`GET .../detail`), edit (`PATCH` with `person.*`), create (`POST` → redirect), delete blocked when orders exist or user linked.
 
 ---
 

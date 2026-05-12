@@ -234,6 +234,90 @@ CREATE INDEX IF NOT EXISTS idx_ube_device_created
 ALTER TABLE persons
     ALTER COLUMN person_id_number DROP NOT NULL;
 
+-- ============================================================
+-- 14. Blog posts — publishing/SEO baseline
+-- ============================================================
+CREATE TABLE IF NOT EXISTS blog_posts (
+    post_id BIGSERIAL PRIMARY KEY,
+    post_title VARCHAR(200) NOT NULL,
+    post_slug VARCHAR(200) NOT NULL UNIQUE,
+    post_summary VARCHAR(500),
+    post_content TEXT NOT NULL,
+    post_thumbnail_url VARCHAR(1000),
+    post_status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    author_user_id BIGINT,
+    published_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE blog_posts
+    ADD COLUMN IF NOT EXISTS post_title VARCHAR(200) NOT NULL DEFAULT '';
+ALTER TABLE blog_posts
+    ADD COLUMN IF NOT EXISTS post_slug VARCHAR(200) NOT NULL DEFAULT '';
+ALTER TABLE blog_posts
+    ADD COLUMN IF NOT EXISTS post_summary VARCHAR(500);
+ALTER TABLE blog_posts
+    ADD COLUMN IF NOT EXISTS post_content TEXT NOT NULL DEFAULT '';
+ALTER TABLE blog_posts
+    ADD COLUMN IF NOT EXISTS post_thumbnail_url VARCHAR(1000);
+ALTER TABLE blog_posts
+    ADD COLUMN IF NOT EXISTS post_status VARCHAR(20) NOT NULL DEFAULT 'DRAFT';
+ALTER TABLE blog_posts
+    ADD COLUMN IF NOT EXISTS author_user_id BIGINT;
+ALTER TABLE blog_posts
+    ADD COLUMN IF NOT EXISTS published_at TIMESTAMP;
+ALTER TABLE blog_posts
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW();
+ALTER TABLE blog_posts
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW();
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_blog_posts_slug
+    ON blog_posts (post_slug);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_published
+    ON blog_posts (post_status, published_at DESC);
+
+ALTER TABLE blog_posts
+    ALTER COLUMN post_content TYPE TEXT
+    USING post_content::text;
+
+UPDATE blog_posts bp
+SET post_content = convert_from(lo_get(bp.post_content::oid), 'UTF8')
+WHERE bp.post_content ~ '^[0-9]+$'
+  AND EXISTS (
+      SELECT 1
+      FROM pg_largeobject_metadata lom
+      WHERE lom.oid = bp.post_content::oid
+  );
+
+-- ============================================================
+-- 15. stock_adjustments — reason CHECK must match Java enum
+-- ============================================================
+-- Older DBs only allowed a subset of reasons; PO receipt / transfers /
+-- stock count use values that must be listed here or inserts fail with:
+--   violates check constraint "stock_adjustments_stock_adjustment_reason_check"
+
+ALTER TABLE stock_adjustments
+    DROP CONSTRAINT IF EXISTS stock_adjustments_stock_adjustment_reason_check;
+
+ALTER TABLE stock_adjustments
+    ADD CONSTRAINT stock_adjustments_stock_adjustment_reason_check
+    CHECK (stock_adjustment_reason IN (
+        'RESERVATION_CREATED',
+        'RESERVATION_RELEASED',
+        'PAYMENT_CONFIRMED',
+        'PAYMENT_ABORTED',
+        'RETURN_RESTORED',
+        'MANUAL_ADJUSTMENT',
+        'STOCK_RECOUNT',
+        'ORDER_CANCELLED',
+        'ORDER_REJECTED',
+        'PURCHASE_ORDER_RECEIPT',
+        'TRANSFER_OUTBOUND',
+        'TRANSFER_INBOUND',
+        'STOCK_COUNT_VARIANCE'
+    ));
+
 COMMIT;
 
 -- ============================================================

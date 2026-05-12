@@ -22,4 +22,5 @@ public class PurchaseOrderLinePojo {
     private int receivedQty;
     private Integer unitCost;
     private String note;
+    private String barcode;
 }

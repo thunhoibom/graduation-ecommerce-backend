@@ -195,7 +195,6 @@ public class PurchaseOrderServiceImpl
             .build();
         receipt = goodsReceiptsRepository.save(receipt);
 
-        List<GoodsReceiptLine> receiptLines = new ArrayList<>();
         for (GoodsReceiptCreateRequest.Line lineRequest : request.getLines()) {
             if (lineRequest == null || lineRequest.getPurchaseOrderLineId() == null || lineRequest.getReceivedQty() == null || lineRequest.getReceivedQty() <= 0) {
                 throw new IllegalArgumentException("Each receipt line requires purchaseOrderLineId and receivedQty > 0");
@@ -212,7 +211,9 @@ public class PurchaseOrderServiceImpl
             poLine.setReceivedQty(poLine.getReceivedQty() + lineRequest.getReceivedQty());
             purchaseOrderLinesRepository.save(poLine);
 
-            receiptLines.add(GoodsReceiptLine.builder()
+            // Mutate the persistent collection — do not receipt.setLines(newList()) or Hibernate
+            // throws "collection with cascade=all-delete-orphan was no longer referenced".
+            receipt.getLines().add(GoodsReceiptLine.builder()
                 .goodsReceipt(receipt)
                 .purchaseOrderLine(poLine)
                 .receivedQty(lineRequest.getReceivedQty())
@@ -228,7 +229,6 @@ public class PurchaseOrderServiceImpl
             );
         }
 
-        receipt.setLines(receiptLines);
         goodsReceiptsRepository.save(receipt);
 
         int totalOrdered = existingLines.stream().mapToInt(PurchaseOrderLine::getOrderedQty).sum();

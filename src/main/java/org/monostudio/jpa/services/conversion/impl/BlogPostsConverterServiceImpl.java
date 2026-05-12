@@ -50,6 +50,7 @@ public class BlogPostsConverterServiceImpl
             .summary(source.getSummary())
             .content(source.getContent())
             .thumbnailUrl(source.getThumbnailUrl())
+            .publishedAt(source.getPublishedAt())
             .build();
 
         if (source.getStatus() != null) {

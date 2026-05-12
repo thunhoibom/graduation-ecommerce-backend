@@ -11,23 +11,35 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.monostudio.api.models.DataPagePojo;
 import org.monostudio.api.models.ProductPojo;
+import org.monostudio.api.models.ProductVariantPojo;
 import org.monostudio.api.models.WeatherCategoryRecommendationPojo;
 import org.monostudio.api.services.PaginationService;
 import org.monostudio.api.services.UserBehaviorService;
 import org.monostudio.jpa.entities.ProductStatus;
 import org.monostudio.jpa.services.SortSpecParserService;
+import org.monostudio.jpa.services.crud.ProductVariantsCrudService;
 import org.monostudio.jpa.services.crud.ProductsCrudService;
+import org.monostudio.jpa.services.predicates.ProductVariantsPredicateService;
 import org.monostudio.jpa.services.predicates.ProductsPredicateService;
+import org.monostudio.jpa.sortspecs.ProductVariantsSortSpec;
 import org.monostudio.jpa.sortspecs.ProductsSortSpec;
+import org.monostudio.jpa.entities.Customer;
+import org.monostudio.jpa.entities.User;
+import org.monostudio.jpa.repositories.CustomersRepository;
+import org.monostudio.jpa.repositories.OrdersRepository;
+import org.monostudio.jpa.repositories.UsersRepository;
 
 import jakarta.persistence.EntityNotFoundException;
 import org.monostudio.search.models.ProductDocument;
 import org.monostudio.search.services.SearchService;
 import org.monostudio.config.cache.CacheNames;
+import java.security.Principal;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Public product browsing endpoints.
@@ -40,26 +52,41 @@ import java.util.Map;
 public class PublicProductsController {
     private final ProductsCrudService productsCrudService;
     private final ProductsPredicateService productsPredicateService;
+    private final ProductVariantsCrudService productVariantsCrudService;
+    private final ProductVariantsPredicateService productVariantsPredicateService;
     private final PaginationService paginationService;
     private final SortSpecParserService sortService;
     private final SearchService searchService;
     private final UserBehaviorService userBehaviorService;
+    private final UsersRepository usersRepository;
+    private final CustomersRepository customersRepository;
+    private final OrdersRepository ordersRepository;
 
     @Autowired
     public PublicProductsController(
         ProductsCrudService productsCrudService,
         ProductsPredicateService productsPredicateService,
+        ProductVariantsCrudService productVariantsCrudService,
+        ProductVariantsPredicateService productVariantsPredicateService,
         PaginationService paginationService,
         SortSpecParserService sortService,
         SearchService searchService,
-        UserBehaviorService userBehaviorService
+        UserBehaviorService userBehaviorService,
+        UsersRepository usersRepository,
+        CustomersRepository customersRepository,
+        OrdersRepository ordersRepository
     ) {
         this.productsCrudService = productsCrudService;
         this.productsPredicateService = productsPredicateService;
+        this.productVariantsCrudService = productVariantsCrudService;
+        this.productVariantsPredicateService = productVariantsPredicateService;
         this.paginationService = paginationService;
         this.sortService = sortService;
         this.searchService = searchService;
         this.userBehaviorService = userBehaviorService;
+        this.usersRepository = usersRepository;
+        this.customersRepository = customersRepository;
+        this.ordersRepository = ordersRepository;
     }
 
     /**
@@ -113,6 +140,31 @@ public class PublicProductsController {
     }
 
     /**
+     * List variants for a published product (storefront contract).
+     * Returns 404 if the product is not published.
+     */
+    @GetMapping("/{barcode}/variants")
+    @Operation(summary = "List variants for a published product by barcode")
+    public DataPagePojo<ProductVariantPojo> listVariantsForPublishedProduct(
+        @PathVariable String barcode,
+        @RequestParam Map<String, String> allRequestParams
+    ) {
+        getProductByBarcode(barcode);
+
+        Map<String, String> params = new HashMap<>();
+        if (allRequestParams != null) {
+            params.putAll(allRequestParams);
+        }
+        params.put("productBarcode", barcode);
+
+        int pageIndex = paginationService.determineRequestedPageIndex(params);
+        int pageSize = paginationService.determineRequestedPageSize(params);
+        var sort = sortService.parse(ProductVariantsSortSpec.ORDER_SPEC_MAP, params);
+        var filters = productVariantsPredicateService.parseMap(params);
+        return productVariantsCrudService.readMany(pageIndex, pageSize, sort, filters);
+    }
+
+    /**
      * Search products using Elasticsearch for full-text search capabilities.
      * Supports pagination, price filtering, and sorting.
      */
@@ -137,7 +189,16 @@ public class PublicProductsController {
         var sort = sortService.parse(ProductsSortSpec.ORDER_SPEC_MAP, params);
 
         List<String> excludeIds = parseExcludeIds(params.get("excludeIds"));
-        
+
+        Boolean inStockOnly = null;
+        if (params.containsKey("inStock")) {
+            if (Boolean.parseBoolean(params.get("inStock"))) {
+                inStockOnly = Boolean.TRUE;
+            }
+        }
+        String color = params.get("color");
+        String size = params.get("size");
+
         return searchService.searchProducts(
                 query,
                 minPrice,
@@ -147,13 +208,16 @@ public class PublicProductsController {
                 pageIndex,
                 pageSize,
                 sort,
-                excludeIds
+                excludeIds,
+                inStockOnly,
+                color,
+                size
         );
     }
 
     @GetMapping("/recommendations/for-you")
     @Operation(summary = "Search-scoped recommendations boosted by recent viewed categories (deviceId)")
-    public DataPagePojo<ProductDocument> recommendationsForYou(@RequestParam Map<String, String> params) {
+    public DataPagePojo<ProductDocument> recommendationsForYou(@RequestParam Map<String, String> params, Principal principal) {
         String query = params.getOrDefault("q", "");
         int pageIndex = paginationService.determineRequestedPageIndex(params);
         int pageSize = paginationService.determineRequestedPageSize(params);
@@ -164,10 +228,17 @@ public class PublicProductsController {
 
         List<String> excludeIds = parseExcludeIds(params.get("excludeIds"));
         String deviceId = params.getOrDefault("deviceId", "").trim();
+        String placement = params.getOrDefault("placement", "home");
 
-        List<String> boostCategories = deviceId.isEmpty()
-                ? List.of()
-                : userBehaviorService.rankCategoryCodesForDevice(deviceId, 5);
+        Set<String> boostCategories = new LinkedHashSet<>();
+        if (!deviceId.isEmpty()) {
+            boostCategories.addAll(userBehaviorService.rankCategoryCodesForDevice(deviceId, 5));
+        }
+        Long customerId = resolveCustomerId(principal);
+        if (customerId != null) {
+            boostCategories.addAll(userBehaviorService.rankCategoryCodesForCustomer(customerId, 5));
+            boostCategories.addAll(ordersRepository.findTopCategoryCodesByCustomerId(customerId, 3));
+        }
 
         Map<String, String> sortParams = new HashMap<>(params);
         if (!sortParams.containsKey("sortBy")) {
@@ -181,12 +252,26 @@ public class PublicProductsController {
         return searchService.searchForYou(
                 query,
                 excludeIds,
-                boostCategories,
+                new ArrayList<>(boostCategories),
+                placement,
                 ProductStatus.PUBLISHED.name(),
                 pageIndex,
                 pageSize,
                 sort
         );
+    }
+
+    private Long resolveCustomerId(Principal principal) {
+        if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
+            return null;
+        }
+        String username = principal.getName().trim();
+        User user = usersRepository.findByNameWithProfile(username).orElse(null);
+        if (user == null || user.getPerson() == null) {
+            return null;
+        }
+        Customer customer = customersRepository.findByPersonId(user.getPerson().getId()).orElse(null);
+        return customer == null ? null : customer.getId();
     }
 
     private static List<String> parseExcludeIds(String raw) {

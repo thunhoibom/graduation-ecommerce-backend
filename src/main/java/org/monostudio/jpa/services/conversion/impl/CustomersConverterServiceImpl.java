@@ -6,6 +6,8 @@ import org.monostudio.api.models.PersonPojo;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.Customer;
 import org.monostudio.jpa.entities.Person;
+import org.monostudio.jpa.repositories.OrdersRepository;
+import org.monostudio.jpa.repositories.UsersRepository;
 import org.monostudio.jpa.services.conversion.CustomersConverterService;
 import org.monostudio.jpa.services.conversion.PeopleConverterService;
 
@@ -13,17 +15,30 @@ import org.monostudio.jpa.services.conversion.PeopleConverterService;
 public class CustomersConverterServiceImpl
     implements CustomersConverterService {
     private final PeopleConverterService peopleConverterService;
+    private final OrdersRepository ordersRepository;
+    private final UsersRepository usersRepository;
 
     @Autowired
     public CustomersConverterServiceImpl(
-        PeopleConverterService peopleConverterService
+        PeopleConverterService peopleConverterService,
+        OrdersRepository ordersRepository,
+        UsersRepository usersRepository
     ) {
         this.peopleConverterService = peopleConverterService;
+        this.ordersRepository = ordersRepository;
+        this.usersRepository = usersRepository;
     }
 
     @Override
     public PersonPojo convertToPojo(Customer source) {
-        return peopleConverterService.convertToPojo(source.getPerson());
+        PersonPojo pojo = peopleConverterService.convertToPojo(source.getPerson());
+        pojo.setCustomerId(source.getId());
+        pojo.setOrderCount(ordersRepository.countForCustomer(source.getId()));
+        pojo.setLoyaltyTier(source.getLoyaltyTier());
+        pojo.setLoyaltyPointsBalance(source.getLoyaltyPointsBalance());
+        pojo.setMonthlySpendCents(source.getMonthlySpendCents());
+        pojo.setLinkedAccount(usersRepository.findByPersonId(source.getPerson().getId()).isPresent());
+        return pojo;
     }
 
     @Override

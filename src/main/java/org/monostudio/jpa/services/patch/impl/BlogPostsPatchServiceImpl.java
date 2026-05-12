@@ -9,6 +9,7 @@ import org.monostudio.jpa.entities.BlogPostStatus;
 import org.monostudio.jpa.repositories.UsersRepository;
 import org.monostudio.jpa.services.patch.BlogPostsPatchService;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @Service
@@ -41,7 +42,19 @@ public class BlogPostsPatchServiceImpl
             target.setThumbnailUrl((String) changes.get("thumbnailUrl"));
         }
         if (changes.containsKey("status")) {
-            target.setStatus(BlogPostStatus.valueOf((String) changes.get("status")));
+            BlogPostStatus status = BlogPostStatus.valueOf(String.valueOf(changes.get("status")).toUpperCase());
+            target.setStatus(status);
+            target.setPublishedAt(status == BlogPostStatus.PUBLISHED
+                ? (target.getPublishedAt() == null ? LocalDateTime.now() : target.getPublishedAt())
+                : null);
+        }
+        if (changes.containsKey("publishedAt")) {
+            Object value = changes.get("publishedAt");
+            if (value == null) {
+                target.setPublishedAt(null);
+            } else if (value instanceof String text && !text.isBlank()) {
+                target.setPublishedAt(LocalDateTime.parse(text));
+            }
         }
         if (changes.containsKey("authorId")) {
             Long authorId = ((Number) changes.get("authorId")).longValue();
@@ -71,7 +84,15 @@ public class BlogPostsPatchServiceImpl
             target.setThumbnailUrl(changes.getThumbnailUrl());
         }
         if (changes.getStatus() != null) {
-            target.setStatus(BlogPostStatus.valueOf(changes.getStatus()));
+            BlogPostStatus status = BlogPostStatus.valueOf(changes.getStatus().toUpperCase());
+            target.setStatus(status);
+            target.setPublishedAt(status == BlogPostStatus.PUBLISHED
+                ? (changes.getPublishedAt() != null ? changes.getPublishedAt() :
+                (target.getPublishedAt() == null ? LocalDateTime.now() : target.getPublishedAt()))
+                : null);
+        }
+        if (changes.getPublishedAt() != null) {
+            target.setPublishedAt(changes.getPublishedAt());
         }
         if (changes.getAuthorId() != null) {
             usersRepository.findById(changes.getAuthorId()).ifPresent(target::setAuthor);

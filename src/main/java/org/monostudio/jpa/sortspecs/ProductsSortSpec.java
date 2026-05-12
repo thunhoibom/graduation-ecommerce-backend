@@ -15,6 +15,9 @@ public class ProductsSortSpec {
         "name", BASE_PATH.name.asc(),
         "barcode", BASE_PATH.barcode.asc(),
         "price", BASE_PATH.price.asc(),
-        "category", BASE_PATH.productCategory.name.asc()
+        "category", BASE_PATH.productCategory.name.asc(),
+        "id", BASE_PATH.id.asc(),
+        /** No separate audit column on Product — treat as proxy for “newest”. */
+        "createdAt", BASE_PATH.id.asc()
     );
 }

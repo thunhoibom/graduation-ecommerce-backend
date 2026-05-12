@@ -9,4 +9,6 @@ import java.util.List;
 public interface UserBehaviorEventsRepository extends org.monostudio.jpa.Repository<UserBehaviorEvent> {
 
     List<UserBehaviorEvent> findByDeviceIdOrderByCreatedAtDesc(String deviceId, Pageable pageable);
+
+    List<UserBehaviorEvent> findByCustomerIdOrderByCreatedAtDesc(Long customerId, Pageable pageable);
 }

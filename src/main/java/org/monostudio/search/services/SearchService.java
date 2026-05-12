@@ -6,7 +6,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.monostudio.api.models.DataPagePojo;
 import org.monostudio.api.models.WeatherCategoryRecommendationPojo;
 import org.monostudio.api.models.WeatherContextPojo;
+import org.monostudio.jpa.entities.BlogPost;
+import org.monostudio.jpa.repositories.BlogPostsRepository;
 import org.monostudio.search.models.ProductDocument;
+import org.monostudio.search.models.BlogPostDocument;
 import org.monostudio.search.repositories.ProductSearchRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +25,7 @@ import co.elastic.clients.json.JsonData;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,6 +36,7 @@ public class SearchService {
     private static final int MAX_EXCLUDE_IDS = 100;
 
     private final ProductSearchRepository productSearchRepository;
+    private final BlogPostsRepository blogPostsRepository;
     private final ElasticsearchOperations elasticsearchOperations;
     private final WeatherContextService weatherContextService;
 
@@ -45,7 +50,20 @@ public class SearchService {
             int pageSize,
             Sort sort
     ) {
-        return searchProducts(keyword, minPrice, maxPrice, category, status, pageIndex, pageSize, sort, null);
+        return searchProducts(
+                keyword,
+                minPrice,
+                maxPrice,
+                category,
+                status,
+                pageIndex,
+                pageSize,
+                sort,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     public DataPagePojo<ProductDocument> searchProducts(
@@ -59,13 +77,54 @@ public class SearchService {
             Sort sort,
             List<String> excludeIds
     ) {
-        log.info("[ES DEBUG] Searching with keyword: '{}', category: '{}', price: {}-{}", 
-                 keyword, category, minPrice, maxPrice);
+        return searchProducts(
+                keyword,
+                minPrice,
+                maxPrice,
+                category,
+                status,
+                pageIndex,
+                pageSize,
+                sort,
+                excludeIds,
+                null,
+                null,
+                null
+        );
+    }
+
+    public DataPagePojo<ProductDocument> searchProducts(
+            String keyword,
+            Integer minPrice,
+            Integer maxPrice,
+            String category,
+            String status,
+            int pageIndex,
+            int pageSize,
+            Sort sort,
+            List<String> excludeIds,
+            Boolean inStockOnly,
+            String color,
+            String size
+    ) {
+        log.info(
+                "[ES DEBUG] Searching with keyword: '{}', category: '{}', price: {}-{}, inStockOnly: {}, color: {}, size: {}",
+                keyword,
+                category,
+                minPrice,
+                maxPrice,
+                inStockOnly,
+                color,
+                size
+        );
 
         // Map JPA-style sort properties to Elasticsearch fields (name is analyzed text → sort on name.keyword)
         Sort esSort = toElasticsearchSort(sort);
 
         Pageable pageable = PageRequest.of(pageIndex, pageSize, esSort);
+
+        String colorToken = normalizeFilterToken(color);
+        String sizeToken = normalizeFilterToken(size);
 
         var queryBuilder = NativeQuery.builder()
                 .withPageable(pageable)
@@ -75,7 +134,7 @@ public class SearchService {
                             if (keyword != null && !keyword.isBlank()) {
                                 b.must(m -> m.match(mt -> mt.field("all").query(keyword)));
                             }
-                            
+
                             // Filter by status
                             if (status != null) {
                                 b.filter(f -> f.term(t -> t.field("status").value(status)));
@@ -89,63 +148,97 @@ public class SearchService {
                             // Range filter for price
                             if (minPrice != null || maxPrice != null) {
                                 b.filter(f -> f.range(r -> {
-                                    if (minPrice != null) r.gte(co.elastic.clients.json.JsonData.of(minPrice));
-                                    if (maxPrice != null) r.lte(co.elastic.clients.json.JsonData.of(maxPrice));
+                                    if (minPrice != null) {
+                                        r.gte(JsonData.of(minPrice));
+                                    }
+                                    if (maxPrice != null) {
+                                        r.lte(JsonData.of(maxPrice));
+                                    }
                                     return r.field("price");
                                 }));
                             }
 
+                            if (Boolean.TRUE.equals(inStockOnly)) {
+                                b.filter(f -> f.range(r -> r.field("stockCurrent").gt(JsonData.of(0))));
+                            }
+
+                            if (colorToken != null) {
+                                b.filter(f -> f.term(t -> t.field("variantColors").value(colorToken)));
+                            }
+
+                            if (sizeToken != null) {
+                                b.filter(f -> f.term(t -> t.field("variantSizes").value(sizeToken)));
+                            }
+
                             applyExcludeProductIds(b, excludeIds);
-                            
+
                             return b;
                         })
                 );
 
         SearchHits<ProductDocument> searchHits = elasticsearchOperations.search(queryBuilder.build(), ProductDocument.class);
-        
+
         List<ProductDocument> items = searchHits.getSearchHits().stream()
                 .map(SearchHit::getContent)
                 .collect(Collectors.toList());
-        
+
         log.info("[ES DEBUG] Search finished. Hits: {}", searchHits.getTotalHits());
 
         return new DataPagePojo<>(items, pageIndex, searchHits.getTotalHits(), pageSize);
     }
 
+    private static String normalizeFilterToken(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String t = raw.trim();
+        if (t.isEmpty()) {
+            return null;
+        }
+        return t.toLowerCase(Locale.ROOT);
+    }
+
     /**
-     * Personalized "for you" rail: same keyword match as search, optional boost from category codes
-     * derived from recent PRODUCT_VIEW events, and excludes current result page product ids.
+     * Personalized "for you" rail: optional full-text match on {@code all}, optional boost from category codes
+     * derived from recent PRODUCT_VIEW events, and optional exclusion of product ids (e.g. current search page).
+     * When keyword is blank, matches all published products with the same boosts/filters (e.g. homepage rail).
      */
     public DataPagePojo<ProductDocument> searchForYou(
             String keyword,
             List<String> excludeIds,
             List<String> categoryBoostCodes,
+            String placement,
             String status,
             int pageIndex,
             int pageSize,
             Sort sort
     ) {
-        if (keyword == null || keyword.isBlank()) {
-            return new DataPagePojo<>(List.of(), pageIndex, 0L, pageSize);
-        }
-
         Sort esSort = toElasticsearchSort(sort);
 
         Pageable pageable = PageRequest.of(pageIndex, pageSize, esSort);
 
         List<String> boosts = categoryBoostCodes == null ? List.of() : categoryBoostCodes;
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
+        String normalizedPlacement = placement == null ? "" : placement.trim().toLowerCase();
+        float categoryBoostWeight = switch (normalizedPlacement) {
+            case "cart", "checkout_success" -> 2.6f;
+            case "pdp" -> 2.3f;
+            default -> 2.0f;
+        };
 
         var queryBuilder = NativeQuery.builder()
                 .withPageable(pageable)
                 .withQuery(q -> q
                         .bool(b -> {
-                            b.must(m -> m.match(mt -> mt.field("all").query(keyword)));
+                            if (hasKeyword) {
+                                b.must(m -> m.match(mt -> mt.field("all").query(keyword)));
+                            }
                             if (status != null) {
                                 b.filter(f -> f.term(t -> t.field("status").value(status)));
                             }
                             for (String cat : boosts) {
                                 if (cat != null && !cat.isBlank()) {
-                                    b.should(s -> s.term(t -> t.field("categoryCodes").value(cat).boost(2.0f)));
+                                    b.should(s -> s.term(t -> t.field("categoryCodes").value(cat).boost(categoryBoostWeight)));
                                 }
                             }
                             b.minimumShouldMatch("0");
@@ -177,6 +270,8 @@ public class SearchService {
                 property = "categoryName";
             } else if ("name".equals(property)) {
                 property = "name.keyword";
+            } else if ("id".equals(property) || "createdAt".equals(property)) {
+                property = "productNumericId";
             }
             return new Sort.Order(order.getDirection(), property);
         }).collect(Collectors.toList()));
@@ -200,6 +295,84 @@ public class SearchService {
 
     public List<ProductDocument> searchProductsSimple(String keyword) {
         return productSearchRepository.findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(keyword, keyword);
+    }
+
+    public DataPagePojo<BlogPostDocument> searchBlogPosts(
+        String keyword,
+        String status,
+        int pageIndex,
+        int pageSize,
+        List<String> excludeIds
+    ) {
+        Pageable pageable = PageRequest.of(pageIndex, pageSize, Sort.by(Sort.Direction.DESC, "id"));
+        var queryBuilder = NativeQuery.builder()
+            .withPageable(pageable)
+            .withQuery(q -> q.bool(b -> {
+                if (keyword != null && !keyword.isBlank()) {
+                    b.must(m -> m.match(mt -> mt.field("all").query(keyword)));
+                }
+                if (status != null && !status.isBlank()) {
+                    b.filter(f -> f.term(t -> t.field("status").value(status)));
+                }
+                if (excludeIds != null && !excludeIds.isEmpty()) {
+                    List<FieldValue> vals = excludeIds.stream()
+                        .filter(s -> s != null && !s.isBlank())
+                        .distinct()
+                        .limit(MAX_EXCLUDE_IDS)
+                        .map(FieldValue::of)
+                        .toList();
+                    if (!vals.isEmpty()) {
+                        b.mustNot(mn -> mn.terms(t -> t.field("id").terms(tv -> tv.value(vals))));
+                    }
+                }
+                return b;
+            }));
+
+        SearchHits<BlogPostDocument> searchHits = elasticsearchOperations.search(queryBuilder.build(), BlogPostDocument.class);
+        List<BlogPostDocument> items = searchHits.getSearchHits().stream()
+            .map(SearchHit::getContent)
+            .collect(Collectors.toList());
+        return new DataPagePojo<>(items, pageIndex, searchHits.getTotalHits(), pageSize);
+    }
+
+    public List<BlogPost> searchRelatedBlogPosts(BlogPost currentPost, int limit) {
+        if (currentPost == null || currentPost.getId() == null) {
+            return List.of();
+        }
+        String queryText = String.join(" ",
+            currentPost.getTitle() == null ? "" : currentPost.getTitle(),
+            currentPost.getSummary() == null ? "" : currentPost.getSummary()
+        ).trim();
+
+        if (queryText.isBlank()) {
+            return List.of();
+        }
+
+        DataPagePojo<BlogPostDocument> result = searchBlogPosts(
+            queryText,
+            "PUBLISHED",
+            0,
+            limit,
+            List.of(currentPost.getId().toString())
+        );
+        if (result.getItems() == null || result.getItems().isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = result.getItems().stream()
+            .map(BlogPostDocument::getId)
+            .filter(id -> id != null && !id.isBlank())
+            .map(Long::valueOf)
+            .toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        java.util.Map<Long, Integer> order = new java.util.HashMap<>();
+        for (int i = 0; i < ids.size(); i++) {
+            order.put(ids.get(i), i);
+        }
+        return blogPostsRepository.findAllById(ids).stream()
+            .sorted(java.util.Comparator.comparingInt(post -> order.getOrDefault(post.getId(), Integer.MAX_VALUE)))
+            .toList();
     }
 
     public WeatherCategoryRecommendationPojo recommendByWeatherAndCategory(

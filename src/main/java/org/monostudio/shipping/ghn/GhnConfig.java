@@ -63,4 +63,10 @@ public class GhnConfig {
 
     @Value("${monostudio.shipping.ghn.return-address:}")
     private String returnAddress;
+
+    @Value("${monostudio.shipping.ghn.return-district-id:0}")
+    private int returnDistrictId;
+
+    @Value("${monostudio.shipping.ghn.return-ward-code:}")
+    private String returnWardCode;
 }

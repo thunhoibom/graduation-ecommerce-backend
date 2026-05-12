@@ -50,8 +50,7 @@ public class BlogPost
     @Column(name = "post_summary")
     private String summary;
 
-    @Lob
-    @Column(name = "post_content", nullable = false)
+    @Column(name = "post_content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
     @Column(name = "post_thumbnail_url")

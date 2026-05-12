@@ -9,4 +9,6 @@ public interface UserBehaviorService {
     void recordBestEffort(BehaviorEventRequestPojo request);
 
     List<String> rankCategoryCodesForDevice(String deviceId, int maxCategories);
+
+    List<String> rankCategoryCodesForCustomer(Long customerId, int maxCategories);
 }

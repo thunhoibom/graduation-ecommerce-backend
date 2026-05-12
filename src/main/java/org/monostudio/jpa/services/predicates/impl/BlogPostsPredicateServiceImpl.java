@@ -7,6 +7,7 @@ import org.monostudio.jpa.entities.BlogPostStatus;
 import org.monostudio.jpa.entities.QBlogPost;
 import org.monostudio.jpa.services.predicates.BlogPostsPredicateService;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @Service
@@ -25,6 +26,11 @@ public class BlogPostsPredicateServiceImpl
         }
         if (parameters.containsKey("authorId")) {
             predicate = predicate.and(QBlogPost.blogPost.author.id.eq(Long.valueOf(parameters.get("authorId"))));
+        }
+        if ("true".equalsIgnoreCase(parameters.get("publishedOnly"))) {
+            predicate = predicate
+                .and(QBlogPost.blogPost.publishedAt.isNotNull())
+                .and(QBlogPost.blogPost.publishedAt.loe(LocalDateTime.now()));
         }
 
         return predicate;

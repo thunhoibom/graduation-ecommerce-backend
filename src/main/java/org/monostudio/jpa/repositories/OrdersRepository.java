@@ -236,4 +236,25 @@ public interface OrdersRepository
         + "WHERE p.email = :email "
         + "ORDER BY o.date DESC")
     List<Order> findByCustomerPersonEmail(@Param("email") String email);
+
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.customer.id = :customerId")
+    long countForCustomer(@Param("customerId") Long customerId);
+
+    @Query(value = """
+        SELECT pc.product_category_code
+        FROM order_details od
+        JOIN orders o ON od.order_id = o.order_id
+        JOIN products p ON od.product_id = p.product_id
+        JOIN product_categories pc ON p.product_category_id = pc.product_category_id
+        WHERE o.customer_id = :customerId
+          AND o.payment_status = 'PAID'
+          AND o.fulfillment_status IN ('PROCESSING', 'CONFIRMED', 'DELIVERY_COMPLETE', 'DELIVERED')
+        GROUP BY pc.product_category_code
+        ORDER BY SUM(od.order_detail_units) DESC
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<String> findTopCategoryCodesByCustomerId(
+        @Param("customerId") Long customerId,
+        @Param("limit") int limit
+    );
 }

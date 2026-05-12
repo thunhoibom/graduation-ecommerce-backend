@@ -51,7 +51,6 @@ public class SecurityConfig {
     private final GoogleOAuth2AuthenticationSuccessHandler googleOAuth2AuthenticationSuccessHandler;
     private final GoogleOAuth2AuthenticationFailureHandler googleOAuth2AuthenticationFailureHandler;
     private final PasswordEncoder passwordEncoder;
-    private AuthenticationManager authenticationManager;
 
     @Autowired
     public SecurityConfig(UserDetailsService userDetailsService,
@@ -79,7 +78,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception {
+    public SecurityFilterChain filterChain(
+        HttpSecurity httpSecurity,
+        AuthenticationManager authenticationManager
+    ) throws Exception {
         // Do not call httpSecurity.authenticationManager(...) here: our @Bean manager only has
         // DaoAuthenticationProvider (for JWT login/guest filters). oauth2Login() needs its own
         // providers (OAuth2LoginAuthenticationProvider etc.); forcing a Dao-only manager breaks Google login.
@@ -98,6 +100,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/public/shipping/**").permitAll()
                 .requestMatchers("/api/public/tracking/**").permitAll()
                 .requestMatchers("/api/public/checkout/**").permitAll()
+                .requestMatchers("/api/public/blog/**").permitAll()
                 .requestMatchers("/api/data/notifications/stream").permitAll()
                 .requestMatchers("/api/public/categories", "/api/public/categories/**").permitAll()
                 .requestMatchers("/api/public/behavior", "/api/public/behavior/**").permitAll()
@@ -114,8 +117,8 @@ public class SecurityConfig {
             .oauth2Login(configure -> configure
                 .successHandler(googleOAuth2AuthenticationSuccessHandler)
                 .failureHandler(googleOAuth2AuthenticationFailureHandler))
-            .addFilter(this.loginFilterForUrl("/api/public/auth/login"))
-            .addFilterAfter(this.guestFilterForUrl("/api/public/guest"),
+            .addFilter(this.loginFilterForUrl("/api/public/auth/login", authenticationManager))
+            .addFilterAfter(this.guestFilterForUrl("/api/public/guest", authenticationManager),
                             JwtLoginAuthenticationFilter.class)
             .addFilterAfter(new JwtTokenVerifierFilter(jwtClaimsParserService, guestSessionsRepository),
                             JwtGuestAuthenticationFilter.class)
@@ -126,10 +129,7 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager() {
-        if (this.authenticationManager == null) {
-            this.authenticationManager = new ProviderManager(this.daoAuthenticationProvider());
-        }
-        return this.authenticationManager;
+        return new ProviderManager(this.daoAuthenticationProvider());
     }
 
     private DaoAuthenticationProvider daoAuthenticationProvider() {
@@ -138,7 +138,10 @@ public class SecurityConfig {
         return provider;
     }
 
-    private UsernamePasswordAuthenticationFilter loginFilterForUrl(String url) throws Exception {
+    private UsernamePasswordAuthenticationFilter loginFilterForUrl(
+        String url,
+        AuthenticationManager authenticationManager
+    ) throws Exception {
         JwtLoginAuthenticationFilter filter = new JwtLoginAuthenticationFilter(
             jwtTokenService,
             authenticationManager,
@@ -147,7 +150,10 @@ public class SecurityConfig {
         return filter;
     }
 
-    private UsernamePasswordAuthenticationFilter guestFilterForUrl(String url) throws Exception {
+    private UsernamePasswordAuthenticationFilter guestFilterForUrl(
+        String url,
+        AuthenticationManager authenticationManager
+    ) throws Exception {
         JwtGuestAuthenticationFilter filter = new JwtGuestAuthenticationFilter(
             securityProperties,
             jwtTokenService,

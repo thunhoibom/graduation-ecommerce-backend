@@ -1,6 +1,7 @@
 package org.monostudio.jpa.services.predicates.impl;
 
 import com.querydsl.core.BooleanBuilder;
+import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,6 +58,31 @@ public class CustomersPredicateServiceImpl
                     case "emailLike":
                         predicate.and(personPath.email.likeIgnoreCase("%" + stringValue + "%"));
                         break;
+                    case "phoneLike": {
+                        String trimmed = stringValue.trim();
+                        if (!trimmed.isEmpty()) {
+                            String like = "%" + trimmed + "%";
+                            BooleanExpression phoneMatch = personPath.phone1.likeIgnoreCase(like)
+                                .or(personPath.phone2.likeIgnoreCase(like));
+                            predicate.and(phoneMatch);
+                        }
+                        break;
+                    }
+                    case "q": {
+                        String q = stringValue.trim();
+                        if (!q.isEmpty()) {
+                            String like = "%" + q + "%";
+                            predicate.and(
+                                personPath.firstName.likeIgnoreCase(like)
+                                    .or(personPath.lastName.likeIgnoreCase(like))
+                                    .or(personPath.email.likeIgnoreCase(like))
+                                    .or(personPath.phone1.likeIgnoreCase(like))
+                                    .or(personPath.phone2.likeIgnoreCase(like))
+                                    .or(personPath.idNumber.likeIgnoreCase(like))
+                            );
+                        }
+                        break;
+                    }
                     default:
                         break;
                 }

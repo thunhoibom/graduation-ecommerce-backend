@@ -70,6 +70,7 @@ public final class InventoryMapper {
             .id(line.getId())
             .variantId(line.getVariant() != null ? line.getVariant().getId() : null)
             .variantSku(line.getVariant() != null ? line.getVariant().getSku() : null)
+            .barcode(line.getVariant() != null ? line.getVariant().getBarcode() : null)
             .productName(line.getVariant() != null && line.getVariant().getProduct() != null ? line.getVariant().getProduct().getName() : null)
             .orderedQty(line.getOrderedQty())
             .receivedQty(line.getReceivedQty())

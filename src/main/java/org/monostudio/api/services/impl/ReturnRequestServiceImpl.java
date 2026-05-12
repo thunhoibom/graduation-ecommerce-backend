@@ -10,6 +10,7 @@ import org.monostudio.api.models.ReturnRequestItemPojo;
 import org.monostudio.api.models.ReturnRequestPojo;
 import org.monostudio.api.services.RefundRetryService;
 import org.monostudio.api.services.ReturnRequestService;
+import org.monostudio.api.services.ReturnShipmentService;
 import org.monostudio.api.services.LoyaltyService;
 import org.monostudio.common.exceptions.BadInputException;
 import org.monostudio.jpa.entities.ProductVariant;
@@ -52,6 +53,7 @@ public class ReturnRequestServiceImpl
     private final Map<String, PaymentService> paymentServices;
     private final RefundRetryService refundRetryService;
     private final LoyaltyService loyaltyService;
+    private final ReturnShipmentService returnShipmentService;
 
     @Autowired
     public ReturnRequestServiceImpl(
@@ -66,7 +68,8 @@ public class ReturnRequestServiceImpl
         KafkaMailProducer kafkaMailProducer,
         @Autowired(required = false) Map<String, PaymentService> paymentServices,
         @Autowired(required = false) RefundRetryService refundRetryService,
-        LoyaltyService loyaltyService
+        LoyaltyService loyaltyService,
+        @Autowired(required = false) ReturnShipmentService returnShipmentService
     ) {
         this.returnRequestsRepository = returnRequestsRepository;
         this.itemsRepository = itemsRepository;
@@ -80,6 +83,7 @@ public class ReturnRequestServiceImpl
         this.paymentServices = paymentServices;
         this.refundRetryService = refundRetryService;
         this.loyaltyService = loyaltyService;
+        this.returnShipmentService = returnShipmentService;
     }
 
     @Override
@@ -124,7 +128,21 @@ public class ReturnRequestServiceImpl
         ReturnRequest saved = returnRequestsRepository.saveAndFlush(existing);
         ReturnRequestPojo pojo = buildReturnRequestPojo(saved, items);
 
-        // Notify customer of approval
+        // Automatically create GHN return-shipment so customer gets a label immediately.
+        // This runs after DB commit; failures are enqueued for retry with exponential backoff.
+        if (returnShipmentService != null) {
+            try {
+                returnShipmentService.requestReturnShipmentCreation(saved.getId());
+                // Reload pojo after tracking number may have been set
+                ReturnRequest reloaded = returnRequestsRepository.findById(saved.getId()).orElse(saved);
+                pojo = buildReturnRequestPojo(reloaded, items);
+            } catch (Exception e) {
+                logger.warn("Return shipment creation failed for returnRequest={}: {} — will retry automatically",
+                    saved.getId(), e.getMessage());
+            }
+        }
+
+        // Notify customer of approval (email includes trackingNumber if already resolved)
         kafkaMailProducer.sendReturnRequestStatusToClient(pojo);
 
         return pojo;
