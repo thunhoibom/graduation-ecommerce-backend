@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/graduation-ecommerce-backend/src/main/java/org/monostudio/api -type f -name *.java)",
+      "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/graduation-ecommerce-backend/src/main/java/org/monostudio/jpa -type f -name *.java)",
+      "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/graduation-ecommerce-backend -name pom.xml -exec cat {})",
+      "Bash(2)",
+      "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/commerce/src -type f \\\\\\(-name *.ts -o -name *.tsx -o -name *.js -o -name *.json \\\\\\))",
+      "Bash(find D:/GRADUATION_PROJECT/graduation_ecommerce/commerce -name api-instance* -o -name *.env*)",
+      "Bash(mvn compile:*)",
+      "Bash(java -version)",
+      "Bash(mvn -version)",
+      "Bash(dir \"C:\\\\Program Files\\\\Java\")",
+      "Bash(dir \"C:\\\\Program Files\\\\Eclipse Adoptium\")",
+      "Bash(where java:*)",
+      "Bash(set JAVA_HOME=C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-17)",
+      "Bash(set JAVA_HOME=C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-21.0.10)",
+      "Bash(mvn clean:*)",
+      "Bash(findstr /i \"error success\")",
+      "Bash(where mvn:*)",
+      "Bash(set PATH=C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-21.0.10\\\\bin)",
+      "Bash(%PATH%)",
+      "Read(//d D:/GRADUATION_PROJECT/graduation_ecommerce/**)",
+      "WebSearch",
+      "Read(//mnt/d/GRADUATION_PROJECT/**)",
+      "Read(//mnt/d/**)",
+      "Read(//mnt/**)",
+      "Bash(ls /home/)",
+      "Read(//c/Users/Nguyen/**)",
+      "Bash(ls \"D:/GRADUATION_PROJECT/graduation_ecommerce/graduation-ecommerce-backend/src/main/java/org/monostudio\")",
+      "Read(//d/GRADUATION_PROJECT/graduation_ecommerce/**)",
+      "Bash(curl *)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(c.get\\('id'\\), c.get\\('person',{}\\).get\\('email','NO EMAIL'\\)\\) for c in data.get\\('items',data if isinstance\\(data,list\\) else []\\)]\")",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\('id:', o.get\\('id'\\), 'status:', o.get\\('status'\\), 'customer:', o.get\\('customer',{}\\).get\\('email','null'\\) if o.get\\('customer'\\) else 'null'\\) for o in \\(data.get\\('items',[]\\) if isinstance\\(data,dict\\) else []\\)]\")",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\('id:', o.get\\('id'\\), 'email:', o.get\\('customer',{}\\).get\\('email'\\) if o.get\\('customer'\\) else 'null'\\) for o in data.get\\('items',[]\\)]\")",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

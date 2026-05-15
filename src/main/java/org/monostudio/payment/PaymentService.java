@@ -1,0 +1,63 @@
+package org.monostudio.payment;
+
+import org.monostudio.api.models.PaymentRedirectionDetailsPojo;
+import org.monostudio.api.models.PaymentResultPojo;
+import org.monostudio.api.models.OrderPojo;
+import org.monostudio.api.models.RefundResultPojo;
+
+/**
+ * Interface for requesting and validating payments through an external payment
+ */
+public interface PaymentService {
+    /**
+     * Request an external payment service to generate a transaction process for us.
+     *
+     * @param transaction The details for the transaction.
+     * @return The information with which to proceed to a payment page.
+     * @throws PaymentServiceException If the payment service is caught under unexpected circumstances.
+     */
+    PaymentRedirectionDetailsPojo requestNewPaymentPageDetails(OrderPojo transaction) throws PaymentServiceException;
+
+    /**
+     * Request the external payment service to report the status of the transaction matching a given token.
+     *
+     * @param transactionToken The token to match the transaction with.
+     * @return The number code that represents the status of that transaction
+     * @throws PaymentServiceException If the payment service is caught under unexpected circumstances.
+     */
+    int requestPaymentResult(String transactionToken) throws PaymentServiceException;
+
+    /**
+     * Request the external payment service to report the status AND authorized amount
+     * of the transaction matching a given token.
+     *
+     * @param transactionToken The token to match the transaction with.
+     * @return PaymentResultPojo containing responseCode (0 = success) and authorizedAmount in cents.
+     * @throws PaymentServiceException If the payment service is caught under unexpected circumstances.
+     */
+    PaymentResultPojo requestPaymentResultWithAmount(String transactionToken) throws PaymentServiceException;
+
+    /**
+     * The configured frontend success page URL.
+     *
+     * @return Said URL.
+     */
+    String getPaymentResultPageUrl();
+
+    /**
+     * Refund a committed transaction through the payment gateway.
+     *
+     * @param transactionToken The token from the original (committed) transaction.
+     * @param amount           Amount to refund in the same unit as totalValue (cents).
+     * @return RefundResultPojo with success flag, gateway response code, type, and balance.
+     * @throws PaymentServiceException On gateway error or communication failure.
+     */
+    RefundResultPojo refund(String transactionToken, int amount) throws PaymentServiceException;
+    /**
+     * Validate the callback data sent from the external payment gateway.
+     *
+     * @param transactionData The parameters sent in the callback request.
+     * @return true if the callback data is valid and authorized, false otherwise.
+     */
+    boolean validateCallback(java.util.Map<String, String> transactionData);
+}

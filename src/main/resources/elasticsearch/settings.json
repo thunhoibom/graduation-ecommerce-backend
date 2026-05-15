@@ -1,0 +1,41 @@
+{
+  "analysis": {
+    "filter": {
+      "vietnamese_synonyms": {
+        "type": "synonym_graph",
+        "lenient": true,
+        "synonyms": [
+          "áo thun, t shirt, t-shirt, tshirt, tee, tee shirt",
+          "áo polo, polo shirt, polo",
+          "quần jean, jeans, jean",
+          "giày sneaker, sneaker, giày chạy bộ, giay chay bo",
+          "túi tote, tote, tui tote",
+          "váy liền, đầm, vay lien, dam",
+          "áo khoác, jacket, ao khoac",
+          "phụ kiện, accessories, accessory, phu kien",
+          "áo sơ mi, sơ mi, so mi, shirt, dress shirt, ao so mi",
+          "blazer, áo blazer, ao blazer"
+        ]
+      }
+    },
+    "analyzer": {
+      "standard_vietnamese": {
+        "type": "custom",
+        "tokenizer": "standard",
+        "filter": [
+          "lowercase",
+          "asciifolding"
+        ]
+      },
+      "standard_vietnamese_search": {
+        "type": "custom",
+        "tokenizer": "standard",
+        "filter": [
+          "lowercase",
+          "asciifolding",
+          "vietnamese_synonyms"
+        ]
+      }
+    }
+  }
+}

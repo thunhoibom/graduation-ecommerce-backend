@@ -1,0 +1,7 @@
+FROM redis:7.2-alpine
+
+# Default Redis port
+EXPOSE 6379
+
+# Persist data (AOF) and keep reasonable snapshot policy for dev/staging usage.
+CMD ["redis-server", "--appendonly", "yes", "--save", "60", "1000", "--loglevel", "warning"]

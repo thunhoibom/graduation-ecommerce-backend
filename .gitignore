@@ -1,0 +1,75 @@
+# Binaries
+target/
+bin/
+
+# Generated files
+src/main/setup/
+src/main/webapp/
+logs/
+
+# Editor files and folders
+.classpath
+.project
+.settings/
+nb-configuration.xml
+nbactions.xml
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+.vscode/
+
+# Do include a simple IntelliJ config
+!.idea/runConfigurations/All_tests.xml
+
+
+# System Files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+._*
+
+# Git worktree files
+/commondir
+/gitdir
+/HEAD
+/index
+/index.*
+/ORIG_HEAD
+/COMMIT_EDITMSG
+/REBASE_HEAD
+/FETCH_HEAD
+/rebase-merge/
+/AUTO_MERGE
+/CHERRY_PICK_HEAD
+/MERGE_MSG
+
+# Application secrets / credentials (never commit)
+*.pem
+*.p12
+*.keystore
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+application-secrets.properties
+
+# H2 database files
+*.db
+*.mv.db
+*.trace.db
+
+# JaCoCo / coverage reports
+coverage/
+*.exec
+
+# Package files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar

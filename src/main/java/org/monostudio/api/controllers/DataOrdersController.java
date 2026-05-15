@@ -1,0 +1,302 @@
+package org.monostudio.api.controllers;
+
+import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.Predicate;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+import org.monostudio.api.DataCrudGenericController;
+import org.monostudio.api.models.DataPagePojo;
+import org.monostudio.api.models.OrderPojo;
+import org.monostudio.api.services.PaginationService;
+import org.monostudio.api.services.OrdersProcessService;
+import org.monostudio.common.exceptions.BadInputException;
+import org.monostudio.jpa.entities.Order;
+import org.monostudio.jpa.repositories.OrdersRepository;
+import org.monostudio.jpa.services.SortSpecParserService;
+import org.monostudio.jpa.services.crud.OrdersCrudService;
+import org.monostudio.jpa.services.predicates.OrdersPredicateService;
+import org.monostudio.jpa.services.conversion.OrdersConverterService;
+import org.monostudio.jpa.sortspecs.OrdersSortSpec;
+import org.monostudio.config.cache.CacheNames;
+
+import jakarta.persistence.EntityExistsException;
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.validation.Valid;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.springframework.http.HttpStatus.CREATED;
+import static org.springframework.http.HttpStatus.NO_CONTENT;
+
+@RestController
+@RequestMapping("/api/data/orders")
+@Tag(name = "Orders management")
+@PreAuthorize("isAuthenticated()")
+public class DataOrdersController
+    extends DataCrudGenericController<OrderPojo, Order> {
+    private final OrdersProcessService processService;
+    private final OrdersRepository ordersRepository;
+    private final OrdersConverterService ordersConverterService;
+
+    @Autowired
+    public DataOrdersController(
+        PaginationService paginationService,
+        SortSpecParserService sortService,
+        OrdersCrudService crudService,
+        OrdersPredicateService predicateService,
+        OrdersProcessService processService,
+        OrdersRepository ordersRepository,
+        OrdersConverterService ordersConverterService
+    ) {
+        super(paginationService, sortService, crudService, predicateService);
+        this.processService = processService;
+        this.ordersRepository = ordersRepository;
+        this.ordersConverterService = ordersConverterService;
+    }
+
+    @Override
+    @GetMapping
+    @Operation(summary = "List orders.")
+    @PreAuthorize("hasAuthority('orders:read')")
+    public DataPagePojo<OrderPojo> readMany(@RequestParam Map<String, String> allRequestParams) {
+        if (allRequestParams!=null) {
+            if (allRequestParams.containsKey("buyOrder")) {
+                Predicate predicate = predicateService.parseMap(allRequestParams);
+                OrderPojo orderPojo = crudService.readOne(predicate);
+                DataPagePojo<OrderPojo> singleItemPage = new DataPagePojo<>();
+                singleItemPage.setItems(List.of(orderPojo));
+                singleItemPage.setTotalCount(1);
+                singleItemPage.setPageSize(1);
+                return singleItemPage;
+            }
+            if (!allRequestParams.containsKey("sortBy") && !allRequestParams.containsKey("order")) {
+                allRequestParams = new HashMap<>(allRequestParams);
+                allRequestParams.put("sortBy", "buyOrder");
+                allRequestParams.put("order", "desc");
+            }
+        }
+        return super.readMany(allRequestParams);
+    }
+
+    @Override
+    @PostMapping
+    @Operation(summary = "Create new orders.")
+    @ResponseStatus(CREATED)
+    @PreAuthorize("hasAuthority('orders:create')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void create( OrderPojo input)
+        throws BadInputException, EntityExistsException {
+        crudService.create(input);
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Replace orders data.")
+    @ResponseStatus(NO_CONTENT)
+    @PreAuthorize("hasAuthority('orders:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void update(OrderPojo input, @PathVariable Long id)
+        throws BadInputException, EntityNotFoundException {
+        crudService.update(input, id);
+    }
+
+    @PatchMapping("/{id}")
+    @Operation(summary = "Update parts of orders data.")
+    @ResponseStatus(NO_CONTENT)
+    @PreAuthorize("hasAuthority('orders:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void partialUpdate(
+        @RequestBody Map<String, Object> input,
+        @PathVariable Long id
+    ) throws BadInputException, EntityNotFoundException {
+        crudService.partialUpdate(input, id)
+            .orElseThrow(() -> new EntityNotFoundException("No element was found to update"));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Remove orders.")
+    @ResponseStatus(NO_CONTENT)
+    @PreAuthorize("hasAuthority('orders:delete')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void delete(@PathVariable Long id)
+        throws EntityNotFoundException {
+        crudService.delete(id);
+    }
+
+    @PostMapping("/confirmation")
+    @Operation(summary = "Confirm a pending order.")
+    @ResponseStatus(NO_CONTENT)
+    @PreAuthorize("hasAuthority('orders:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void confirmSell(@RequestBody OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        processService.markAsConfirmed(sell);
+    }
+
+    @PostMapping("/rejection")
+    @Operation(summary = "Reject a pending order.")
+    @PreAuthorize("hasAuthority('orders:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void rejectSell(@RequestBody OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        processService.markAsRejected(sell);
+    }
+
+    @PostMapping("/completion")
+    @Operation(summary = "Mark an order as completed.")
+    @PreAuthorize("hasAuthority('orders:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void completeSell(@RequestBody OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        processService.markAsCompleted(sell);
+    }
+
+    @PostMapping("/delivery-on-route")
+    @Operation(summary = "Mark a confirmed order as handed over to carrier.")
+    @PreAuthorize("hasAuthority('orders:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void markDeliveryOnRoute(@RequestBody OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        processService.markAsDeliveryOnRoute(sell);
+    }
+
+    @PostMapping("/delivery-failed")
+    @Operation(summary = "Mark an in-transit order as delivery failed.")
+    @PreAuthorize("hasAuthority('orders:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void markDeliveryFailed(@RequestBody OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        processService.markAsDeliveryFailed(sell);
+    }
+
+    @PostMapping("/delivery-cancelled")
+    @Operation(summary = "Mark an in-transit order as recalled/cancelled.")
+    @PreAuthorize("hasAuthority('orders:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void markDeliveryCancelled(@RequestBody OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        processService.markAsDeliveryCancelled(sell);
+    }
+
+    @PostMapping("/return")
+    @Operation(summary = "Mark a fulfilled/failed/cancelled delivery order as returned.")
+    @PreAuthorize("hasAuthority('orders:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void markReturned(@RequestBody OrderPojo sell)
+        throws BadInputException, EntityNotFoundException {
+        processService.markAsReturned(sell);
+    }
+
+    @PostMapping("/cancellation")
+    @Operation(summary = "Request delivery recall for an in-transit order.")
+    @PreAuthorize("hasAuthority('orders:update')")
+    @Caching(evict = {
+        @CacheEvict(cacheNames = CacheNames.ADMIN_DASHBOARD_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_REVENUE_STATS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_TOP_PRODUCTS, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_LOW_STOCK, allEntries = true),
+        @CacheEvict(cacheNames = CacheNames.ADMIN_ORDER_STATUS_BREAKDOWN, allEntries = true)
+    })
+    public void cancelOrder(@RequestBody Map<String, Object> request)
+        throws EntityNotFoundException, BadInputException {
+        Object rawId = request.get("id");
+        if (rawId == null) {
+            rawId = request.get("buyOrder");
+        }
+        Long orderId = null;
+        if (rawId instanceof Number number) {
+            orderId = number.longValue();
+        }
+        if (orderId == null) {
+            throw new BadInputException("Missing order id for cancellation");
+        }
+        String reason = null;
+        Object rawReason = request.get("notes");
+        if (rawReason == null) {
+            rawReason = request.get("reason");
+        }
+        if (rawReason instanceof String reasonValue) {
+            reason = reasonValue;
+        }
+        org.monostudio.jpa.entities.Order order = ordersRepository.getById(orderId);
+        OrderPojo pojo = ordersConverterService.convertToPojo(order);
+        pojo.setToken(order.getTransactionToken());
+        processService.markAsAdminCancelled(pojo, reason);
+    }
+
+    @Override
+    protected Map<String, OrderSpecifier<?>> getOrderSpecMap() {
+        return OrdersSortSpec.ORDER_SPEC_MAP;
+    }
+}
